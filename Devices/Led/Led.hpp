@@ -1,8 +1,8 @@
 //----------------------------------------------------------------------------------
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
-//  github:       https://github.com/7bnx/
-//  Description:  Simple library to handle few Led operations.
+//  github:       https://github.com/7bnx/Embedded
+//  Description:  Handle single Led operations.
 //  TODO:
 //----------------------------------------------------------------------------------
 
@@ -13,26 +13,28 @@
 
 /*!
   @file
-  @brief Led driver. Header.
+  @brief Led driver
 */
 
 /*!
-  @brief Namespace for Led.
+  @brief Namespace for devices.
 */
-namespace nLed{
+namespace device{
 
 /*!
   @brief Class of Led Object.
   @tparam Pin hardware-dependent output. Must implements field void Pin::Set(bool state)
-  @tparam isOnHigh  if true, Led starts emitting, when Pin goes high
+  @tparam isOnHigh sif true, Led starts emitting, when Pin goes high
 */  
 template<typename Pin, bool isOnHigh = true>
 class Led{
-public:    
+public:
+
 	/*!
     @brief Led Handler. Put it in your infinity loop, or task. Each call increments Led's state counter
   */
 	static void Handler();
+
   /*!
     @brief Turns Led to "Blink mode". Led immediately goes to ON
     @param [in] ticksOn period, when Led is ON
@@ -40,6 +42,7 @@ public:
     @param [in] qtyBlinks number of times the Led will be blinking. = 0 - infinity blinking cycle
   */
   static void Blink(uint32_t ticksOn, uint32_t ticksOff, uint32_t qtyBlinks = 0);
+
   /*!
     @brief Turns Led to "BlinkRow mode". It makes pause between blinking sequence.   \n
     E.g: Led::BlinkRow(1,2,2,3,2) -> |--|-----|--|--  -> Led turns off
@@ -51,43 +54,52 @@ public:
   */
   static void BlinkRow(uint32_t ticksOn, uint32_t ticksOff, uint32_t qtyBlinks, 
                        uint32_t ticksPause = 0, uint32_t qtyBlinksRow = 0);
+
   /*!
     @brief Turns Led to new state. Resets Blink(...) and BlinkRow(...) parameters
   */
   static void Set(bool isLedOn);
+
   /*!
     @brief Turns Led to permanent ON. Resets Blink(...) and BlinkRow(...) parameters
   */
   static void On();
+
   /*!
     @brief Turns Led's to permanent OFF. Resets Blink(...) and BlinkRow(...) parameters
   */
   static void Off();
+
   /*!
     @brief Changes emitting state of Led. Resets Blink(...) and BlinkRow(...) parameters
   */  
   static void Toggle();
+
   /*!
     @brief Returns current emitting state of Led
   */
   __attribute__ ((always_inline)) inline 
   static bool IsOn(){return isOn;}
+
   /*!
     @brief Enables or disables Led. When disabled, another methods take no effect
   */
   __attribute__ ((always_inline)) inline 
   static void Enable(bool state = true){isEnabled = state;}
+
   /*!
     @brief Returns the current state of Led
   */
   __attribute__ ((always_inline)) inline 
   static bool IsEnable(){return isEnabled;}
+
 	/*!
     @brief Use in conditional statements. E.g.: if (led) {...}
 		@return emitting state
   */
   __attribute__ ((always_inline)) inline 
   operator bool() const {return isOn;};
+  
   /*!
     @brief Assigning the the new state to the Led
     @param [in] state new emitting state
@@ -117,9 +129,8 @@ private:
 	
 };
 
-}  // !nLed
+}  // !device
 
 #include "Led.cpp"
 
 #endif // !_LED_H
-//----------------------------------------------------------------------------------

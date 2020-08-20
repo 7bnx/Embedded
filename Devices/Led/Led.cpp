@@ -6,7 +6,7 @@
 #define PARAMETERS typename Pin, bool isOnHigh
 #define CLASS Led<Pin, isOnHigh>
 
-namespace nLed{
+namespace device{
 
 /*!
   @brief Led Handler. Put it in your infinity loop, or task. Each call increments Led's state counter
@@ -128,7 +128,7 @@ void CLASS:: BlinkHandler(){
   }
 }
 
-} // !nLed
+} // !device
 
 #undef PARAMETERS
 #undef CLASS

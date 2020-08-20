@@ -7,7 +7,7 @@
 									 uint32_t ticksDebounce, uint32_t ticksLongPress
 #define CLASS Button<Pin, isActiveLow, ticksDebounce, ticksLongPress>
 
-namespace nButton{
+namespace device{
 
 /*!
   @brief Handles the button. Put it in your infinity loop, or task
@@ -68,7 +68,7 @@ void CLASS::HandlerRelease(){
   }
 }
 
-} // !nButton
+} // !device
 
 #undef PARAMETERS
 #undef CLASS

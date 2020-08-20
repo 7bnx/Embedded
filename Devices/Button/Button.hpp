@@ -1,8 +1,8 @@
 //----------------------------------------------------------------------------------
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
-//  github:       https://github.com/7bnx/
-//  Description:  Simple library to handles HMI-Button.
+//  github:       https://github.com/7bnx/Embedded
+//  Description:  Handle HMI-Button.
 //  TODO:
 //----------------------------------------------------------------------------------
 
@@ -14,13 +14,13 @@
 
 /*!
   @file
-  @brief Simple Button driver.
+  @brief Button driver.
 */
 
 /*!
-  @brief Namespace for Button.
+  @brief Namespace for devices.
 */
-namespace nButton {
+namespace device{
 
 /*!
   @brief Class of Button Object.
@@ -31,7 +31,7 @@ namespace nButton {
 */
 template<typename Pin, bool isActiveLow = false,
          uint32_t ticksDebounce = 30, uint32_t ticksLongPress = 1500>
-class Button {
+class Button{
 public:
 
   /*!
@@ -78,19 +78,19 @@ public:
     @brief Executes when the button is pressed.  \n
     Usage: Like lambda with optional 1 variable in capture list, or regular function
   */
-  static inline nCallback::Callback CallbackPressed;
+  static inline utils::Callback CallbackPressed;
 
   /*!
     @brief Executes when the button is long pressed.   \n
     Usage: Like lambda with optional 1 variable in capture list, or regular function
   */
-  static inline nCallback::Callback CallbackPressedLong;
+  static inline utils::Callback CallbackPressedLong;
 
   /*!
     @brief Executes when the button is released.    \n
     Usage: Like lambda with optional 1 variable in capture list, or regular function
   */
-  static inline nCallback::Callback CallbackReleased;
+  static inline utils::Callback CallbackReleased;
 
 private:
   static inline bool isEnabled = true;
@@ -103,9 +103,8 @@ private:
   static void HandlerRelease();
 };
 
-} // !nButton
+} // !device
 
 #include "Button.cpp"
 
 #endif // !_BUTTON_H
-//----------------------------------------------------------------------------------

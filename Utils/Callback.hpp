@@ -1,7 +1,7 @@
 //----------------------------------------------------------------------------------
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
-//  github:       https://github.com/7bnx/
+//  github:       https://github.com/7bnx/Embedded
 //  Description:  Lambda callback.
 //  TODO:
 //----------------------------------------------------------------------------------
@@ -11,14 +11,17 @@
 
 /*!
   @file
-  @brief Callback with 2 parameters in capture-list.
+  @brief Callback with 1 parameters in capture-list.
 */
 
 /*!
-  @brief Namespace for Button.
+  @brief Namespace for utils.
 */
-namespace nCallback {
+namespace utils{
 
+/*!
+  @brief Uses for events and triggers
+*/
 class Callback {
 
 public:
@@ -29,12 +32,12 @@ public:
 
   /*!
     @brief Assign function to Callback
-    @param [in] func new function
+    @tparam <T> new function
   */
 	template<class T>
 	void operator=(T func) {
-		static_assert((sizeof(parameters) >= sizeof(T)), "Too much variables in capture list");
-    //sizeof(int[sizeof(parameters) - sizeof(T)]);
+		static_assert((sizeof(parameters) >= sizeof(T)),  
+    "Too much variables in capture list");
     // Save the pointer to function, that call func
 		function = [](void* param) {
 			(*(T*)param)();
@@ -53,6 +56,10 @@ public:
     if (function != nullptr)
 		  function(parameters);
 	}
+
+  /*!
+    @brief Reset Callback
+  */
   __attribute__ ((always_inline)) inline
 	void Reset() { function = [](void *){}; }
 
@@ -62,6 +69,6 @@ private:
 
 };
 
-}
+} //!namespace utils
 
 #endif // !_CALLBACK_H
