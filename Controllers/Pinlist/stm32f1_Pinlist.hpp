@@ -2,7 +2,7 @@
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
 //  github:       https://github.com/7bnx/Embedded
-//  Description:  Hardware-dependent library for list of Pins 
+//  Description:  List of pins operation. STM32F1-series
 //  TODO:          
 //----------------------------------------------------------------------------------
 
@@ -11,21 +11,47 @@
 
 #include <cstdint>
 #include "stm32f10x.h"
+#include "pinlist.hpp"
+#include "stm32f1_Pin.hpp"
 #include "pinlist_traits.hpp"
 
-
-namespace stm32f1::hardware{
+/*!
+  @brief Controller's peripherals devices
+*/
+namespace controller{
 
 /*!
   @brief Operate with list of pin
   @tparam <typename... Pins> list of single pins or/and Pinlist.
 */ 
 template<typename... Pins>
-class _PinlistImplementation{
+class Pinlist: public common::Pinlist<Pinlist<Pins...>, Pins...>{
+
 public:
 
   /*!
-    @brief List of pins
+    @brief Pop number pins from front
+    @tparam <number> of pins to pop
+    @return New Pinlist without poped pins
+  */
+  template<size_t number>
+  using pop_front_pins_t = pinlist_traits::pop_front_pins_t<number, utils::expand_t<typename Pins::pins...>>;
+
+private:
+
+  using basePinlist = common::Pinlist<Pinlist<Pins...>, Pins...>;
+
+  friend basePinlist;
+  friend Power;
+
+  template<typename>
+  friend class controller::Pin;
+
+  template<typename...>
+  friend class Pinlist;
+
+  /*!
+    @brief Expanded list of pins
   */ 
   using pins = utils::expand_t<typename Pins::pins...>;
 
@@ -37,72 +63,45 @@ public:
   /*!
     @brief For Power class usage
   */ 
-
   using power = pinlist_traits::make_power_list_t<pins>;
+
   /*!
-    @brief Number of pins in list
+    @brief Remap values from perepheral devices
   */ 
-  static constexpr size_t size = utils::size_of_list_v<pins>;
+  using remap = utils::ctv<(Pins::remap::value | ...)>;
 
   /*!
     @brief Initialize list of pins
   */ 
-  static void Init(){
-    if constexpr(sizeof...(Pins))
-      Config<pins, ports>();
+  static void _Init(){
+    _Config<pins, ports>();
   }
 
   /*!
-    @brief Reset pins to default state
+    @brief Set state of single pin
+    @tparam <pinNumber> number of pin to set. Little endian
+    @param [in] state to set
   */ 
-  static void Reset(){
-    if constexpr (sizeof...(Pins) == 0){
-      SetValueToPort<0U, GPIOA_BASE, GPIOB_BASE, GPIOC_BASE, GPIOD_BASE, 
-                         GPIOE_BASE, GPIOE_BASE, GPIOF_BASE, GPIOG_BASE>();
-      return;
-    }
-    using resetPins = pinlist_traits::set_config_to_pins_t<controller::pinConfiguration::Input_Analog, pins>;
-    Config<resetPins, ports>();
+  template<size_t pinNumber>
+  static void _WritePin(bool state){
+    size_t constexpr number = basePinlist::size - pinNumber - 1;
+    utils::get_element_t<pins, number>::Set(state);
   }
 
   /*!
-    @brief Set pins in list to low power mode
+    @brief Set state of list
+    @tparam <Ports> ports to set value
+    @param [in] value to set. Little endian
   */ 
-  static void ToLowPowerMode(){ Reset(); }
-
-  /*!
-    @brief Set all pins in list to High-level
-  */ 
-  static void High(){ SetOutput<true, pins, ports>(); }
-
-  /*!
-    @brief Set all pins in list to Low-level
-  */
-  static void Low(){ SetOutput<false, pins, ports>();}
-
-  /*!
-    @brief Write value to pins in list
-  */
-  static void Write(uint32_t value){ WriteHelper<ports>(value); }
-
-  /*!
-    @brief Read the state of pins in list
-  */
-  static uint32_t Read(){ return ReadHelper<ports>(); }
-
-private:
-
-  _PinlistImplementation() = delete;
-
-  template<typename Ports>
-  static void WriteHelper(uint32_t value){
+  template<typename Ports = ports>
+  static void _Write(uint32_t value){
     static constexpr auto base = utils::front_t<Ports>::value;
     static constexpr auto GPIOx  = []() constexpr { return (GPIO_TypeDef*)(base);};
     
     using pinlistOfPort = pinlist_traits::make_port_pinlist_t<base, pins>;
-    using positionlistOfPort = pinlist_traits::make_port_positionlist_t<base, size - 1U, pins>;
+    using positionlistOfPort = pinlist_traits::make_port_positionlist_t<base, basePinlist::size - 1U, pins>;
 
-    GPIOx()->BSRR = (portConfigurationMask<base, pins>::value << 16U) | newValue<
+    GPIOx()->BSRR = (portConfigurationMask<base, pins>::value << 16U) | _newValue<
                                                                                 true, 
                                                                                 utils::front_v<positionlistOfPort>, 
                                                                                 utils::front_t<pinlistOfPort>, 
@@ -114,18 +113,23 @@ private:
 
     using next = utils::pop_front_t<Ports>;
     if constexpr(!utils::is_empty_v<next>)
-      WriteHelper<next>(value);
+      _Write<next>(value);
   }
 
-  template<typename Ports>
-  static uint32_t ReadHelper(){
+  /*!
+    @brief Read state of list
+    @tparam <Ports> ports to read value
+    @return Little endian value
+  */ 
+  template<typename Ports = ports>
+  static uint32_t _Read(){
     static constexpr auto base = utils::front_t<Ports>::value;
     static constexpr auto GPIOx  = []() constexpr { return (GPIO_TypeDef*)(base);};
 
     using pinlistOfPort = pinlist_traits::make_port_pinlist_t<base, pins>;
-    using positionlistOfPort = pinlist_traits::make_port_positionlist_t<base, size - 1, pins>;
+    using positionlistOfPort = pinlist_traits::make_port_positionlist_t<base, basePinlist::size - 1U, pins>;
 
-    uint32_t value = newValue<
+    uint32_t value = _newValue<
                               false, 
                               utils::front_v<positionlistOfPort>, 
                               utils::front_t<pinlistOfPort>, 
@@ -137,13 +141,42 @@ private:
   
     using next = utils::pop_front_t<Ports>;
     if constexpr (!utils::is_empty_v<next>)
-      return value | ReadHelper<next>();
+      return value | _Read<next>();
     return value;
   }
 
+  /*!
+    @brief Set pins in list to low power mode
+  */ 
+  static void _ToLowPowerMode(){ _Reset(); }
+
+  /*!
+    @brief Set all pins in list to High-level
+  */ 
+  static void _High(){ _SetOutput<true, pins, ports>(); }
+
+  /*!
+    @brief Set all pins in list to Low-level
+  */
+  static void _Low(){ _SetOutput<false, pins, ports>();}
+
+  /*!
+    @brief Reset pins to default state
+  */ 
+  static void _Reset(){
+    if constexpr (sizeof...(Pins) == 0){
+      _SetValueToPort<0U, GPIOA_BASE, GPIOB_BASE, GPIOC_BASE, GPIOD_BASE, 
+                         GPIOE_BASE, GPIOE_BASE, GPIOF_BASE, GPIOG_BASE>();
+      return;
+    }
+    using resetPins = pinlist_traits::set_config_to_pins_t<pinConfiguration::Input_Analog, pins>;
+    _Config<resetPins, ports>();
+  }
+
   template<typename pins, typename ports>
-  static void Config(){
-    
+  static void _Config(){
+    if constexpr(sizeof...(Pins) == 0) return;
+
     static constexpr auto base = utils::front_t<ports>::value;
     static constexpr auto GPIOx  = []() constexpr { return (GPIO_TypeDef*)(base);};
 
@@ -169,19 +202,22 @@ private:
 
     using next = utils::pop_front_t<ports>;
     if constexpr(!utils::is_empty_v<next>)
-      Config<pins, next>();
+      _Config<pins, next>();
+
+    if constexpr(constexpr uint32_t value = remap::value; value)
+      AFIO->MAPR |= value;
   }
 
-  template<bool isHigh, uint8_t pinNum, controller::pinConfiguration config>
-  static constexpr uint32_t GetPinConfigurationValue(){
+  template<bool isHigh, uint8_t pinNum, pinConfiguration config>
+  static constexpr uint32_t _GetPinConfigurationValue(){
     if constexpr (pinNum >= 8U && !isHigh) return 0U;
     else if constexpr (pinNum < 8U && isHigh) return 0U;
-    return (static_cast<uint32_t>(config) & static_cast<uint32_t>(controller::pinConfiguration::ClearMask)) << 
+    return (static_cast<uint32_t>(config) & static_cast<uint32_t>(pinConfiguration::ClearMask)) << 
            ((pinNum >= 8 ? pinNum - 8 : pinNum)*4U);
   }
 
   template<auto value, auto... base>
-  static void SetValueToPort(){
+  static void _SetValueToPort(){
     (..., [](){
       static constexpr auto GPIOx  = []() constexpr { return (GPIO_TypeDef*)(base);};
       GPIOx()->CRL = static_cast<uint32_t>(value);
@@ -197,9 +233,9 @@ private:
   template<auto base, bool isHigh, bool isReset, typename Head, typename... Tail>
   struct portConfigurationValue<base, isHigh, isReset, Head, Tail...>{
     static constexpr auto number = Head::number;
-    static constexpr auto config = isReset ? controller::pinConfiguration::ClearMask : Head::configuration;
+    static constexpr auto config = isReset ? pinConfiguration::ClearMask : Head::configuration;
     static constexpr auto baseAddress = Head::baseAddress;
-    static constexpr auto value = ((baseAddress == base) ? GetPinConfigurationValue<isHigh, number, config>() : 0U) | 
+    static constexpr auto value = ((baseAddress == base) ? _GetPinConfigurationValue<isHigh, number, config>() : 0U) | 
                                   portConfigurationValue<base, isHigh, isReset, Tail...>::value;
   };
 
@@ -235,12 +271,12 @@ private:
     static constexpr auto baseAddress = Head::baseAddress;
     static constexpr auto config = Head::configuration;
     static constexpr auto value = portConfigurationODR<base, Tail...>::value | ((baseAddress != base) ? 0U : 
-      []()constexpr -> uint32_t{if constexpr (config == controller::pinConfiguration::Output_High_2MHz ||
-                                              config == controller::pinConfiguration::Output_High_10MHz || 
-                                              config == controller::pinConfiguration::Output_High_50MHz || 
-                                              config == controller::pinConfiguration::Input_PullUp ||
-                                              config == controller::pinConfiguration::Interrupt_Falling || 
-                                              config == controller::pinConfiguration::Event_Falling)
+      []()constexpr -> uint32_t{if constexpr (config == pinConfiguration::Output_High_2MHz ||
+                                              config == pinConfiguration::Output_High_10MHz || 
+                                              config == pinConfiguration::Output_High_50MHz || 
+                                              config == pinConfiguration::Input_PullUp ||
+                                              config == pinConfiguration::Interrupt_Falling || 
+                                              config == pinConfiguration::Event_Falling)
                                               {return Head::mask;} 
                                               return 0U; }());
   };
@@ -250,12 +286,12 @@ private:
     static constexpr auto value = portConfigurationODR<base, List...>::value;
   };
 
-    template<auto base, controller::pinConfiguration one, controller::pinConfiguration two, typename...>
+    template<auto base, pinConfiguration one, pinConfiguration two, typename...>
   struct portConfigurationEXTI{
     static constexpr auto value = 0U;
   };
 
-  template<auto base, controller::pinConfiguration one, controller::pinConfiguration two, typename Head, typename... Tail>
+  template<auto base, pinConfiguration one, pinConfiguration two, typename Head, typename... Tail>
   struct portConfigurationEXTI<base, one, two, Head, Tail...>{
     static constexpr auto mask = Head::mask;
     static constexpr auto config = Head::configuration;
@@ -264,26 +300,26 @@ private:
                                     portConfigurationEXTI<base, one, two, Tail...>::value;
   };
 
-  template<auto base, controller::pinConfiguration one, controller::pinConfiguration two, typename... List>
+  template<auto base, pinConfiguration one, pinConfiguration two, typename... List>
   struct portConfigurationEXTI<base, one, two, utils::Typelist<List...>>{
     static constexpr auto value = portConfigurationEXTI<base, one, two, List...>::value;
   };
 
   template<auto base, typename... List>
   static constexpr uint32_t portConfigurationEMR = 
-    portConfigurationEXTI<base, controller::pinConfiguration::Event_Falling, controller::pinConfiguration::Event_Rising, List...>::value;
+    portConfigurationEXTI<base, pinConfiguration::Event_Falling, pinConfiguration::Event_Rising, List...>::value;
 
   template<auto base, typename... List>
   static constexpr uint32_t portConfigurationIMR = 
-    portConfigurationEXTI<base, controller::pinConfiguration::Interrupt_Falling, controller::pinConfiguration::Interrupt_Rising, List...>::value;
+    portConfigurationEXTI<base, pinConfiguration::Interrupt_Falling, pinConfiguration::Interrupt_Rising, List...>::value;
 
   template<auto base, typename... List>
   static constexpr uint32_t portConfigurationFTSR = 
-    portConfigurationEXTI<base, controller::pinConfiguration::Event_Falling, controller::pinConfiguration::Interrupt_Falling, List...>::value;
+    portConfigurationEXTI<base, pinConfiguration::Event_Falling, pinConfiguration::Interrupt_Falling, List...>::value;
 
   template<auto base, typename... List>
   static constexpr uint32_t portConfigurationRTSR = 
-    portConfigurationEXTI<base, controller::pinConfiguration::Event_Rising, controller::pinConfiguration::Interrupt_Rising, List...>::value;
+    portConfigurationEXTI<base, pinConfiguration::Event_Rising, pinConfiguration::Interrupt_Rising, List...>::value;
 
   template<auto base, typename... List>
   static constexpr uint32_t portConfigurationLowValue = portConfigurationValue<base, false, false, List...>::value;
@@ -297,15 +333,15 @@ private:
   template<auto base, typename... List>
   static constexpr uint32_t portConfigurationClearHighValue = portConfigurationValue<base, true, true, List...>::value;
 
-  template<uint8_t pinNum, controller::pinConfiguration config,
-           controller::pinConfiguration one, controller::pinConfiguration second>
-  constexpr uint32_t GetExternalValue(){
+  template<uint8_t pinNum, pinConfiguration config,
+           pinConfiguration one, pinConfiguration second>
+  constexpr uint32_t _GetExternalValue(){
     if constexpr (config == one || config == second) return (1U << pinNum); 
     return 0U;
   }
 
   template<bool isHigh, typename pins, typename power>
-  static void SetOutput(){ 
+  static void _SetOutput(){ 
     static constexpr auto base = utils::front_t<power>::value;
     static constexpr auto GPIOx  = []() constexpr { return (GPIO_TypeDef*)(base);};
     static constexpr auto value = portConfigurationMask<base, pins>::value;
@@ -313,34 +349,34 @@ private:
 
     using next = utils::pop_front_t<power>;
     if constexpr (!utils::is_empty_v<next>)
-      SetOutput<isHigh, pins, next>();
+      _SetOutput<isHigh, pins, next>();
 
   }
 
   template<bool isWrite, typename positionList, typename Pinslist> 
-  static uint32_t singleValue(uint32_t val){
+  static uint32_t _singleValue(uint32_t val){
     uint32_t value;
-    if constexpr (isWrite) value = shiftedDirectValue<(1U << utils::front_v<positionList>), utils::front_t<Pinslist>::number, utils::front_v<positionList>>(val);
-    else value = shiftedDirectValue<(1U << utils::front_t<Pinslist>::number), utils::front_v<positionList>, utils::front_t<Pinslist>::number>(val);
+    if constexpr (isWrite) value = _shiftedDirectValue<(1U << utils::front_v<positionList>), utils::front_t<Pinslist>::number, utils::front_v<positionList>>(val);
+    else value = _shiftedDirectValue<(1U << utils::front_t<Pinslist>::number), utils::front_v<positionList>, utils::front_t<Pinslist>::number>(val);
     if constexpr (utils::is_empty_v<utils::pop_front_t<positionList>>) 
       return value;
     else 
-      return value | singleValue<isWrite, utils::pop_front_t<positionList>, utils::pop_front_t<Pinslist>>(val);
+      return value | _singleValue<isWrite, utils::pop_front_t<positionList>, utils::pop_front_t<Pinslist>>(val);
   }
 
   template<bool isWrite, auto frontPinPosition, typename frontPin, 
            typename NoneMask, typename singlePositions, typename positionList, typename Pinslist>
-  static uint32_t directValue(uint32_t val){
+  static uint32_t _directValue(uint32_t val){
     using current = pinlist_traits::directChainValue<frontPinPosition, frontPin, NoneMask, singlePositions, positionList, Pinslist>;
     constexpr uint32_t mask = isWrite ? current::mask : current::maskRead;
     constexpr uint32_t number = isWrite ? frontPin::number : frontPinPosition;
     constexpr uint32_t position = isWrite ? frontPinPosition : frontPin::number;
-    uint32_t value = shiftedDirectValue<mask, number, position>(val);
+    uint32_t value = _shiftedDirectValue<mask, number, position>(val);
     if constexpr (utils::is_empty_v<typename current::rest>)
       return value;
     else{
       return value | 
-        directValue<
+        _directValue<
                     isWrite,
                     utils::front_v<typename current::newPositionList>, 
                     utils::front_t<typename current::rest>, 
@@ -354,7 +390,7 @@ private:
 
   template<bool isWrite, auto frontPinPosition, typename frontPin, 
            typename NoneMask, typename singlePositions, typename positionList, typename Pinslist>
-  static uint32_t newValue(uint32_t val){
+  static uint32_t _newValue(uint32_t val){
     using current = pinlist_traits::reverseChainValue<frontPinPosition, frontPin, NoneMask, singlePositions, positionList, Pinslist>;
     constexpr uint32_t mask = isWrite ? current::mask : current::maskRead;
     uint32_t value = current::pinsNumber > 1 ? __RBIT(val & mask) >> current::shift : 0U;
@@ -363,10 +399,9 @@ private:
         return value;
       else 
         return value | 
-          directValue<
+          _directValue<
                       isWrite,
-                      utils::front_v<
-                      typename current::singlePinsPositions>, 
+                      utils::front_v<typename current::singlePinsPositions>, 
                       utils::front_t<typename current::singlePinsList>, 
                       utils::Typelist<>, 
                       utils::Valuelist<>, 
@@ -375,7 +410,7 @@ private:
                     >(val);
     }
     else
-      return value | newValue<
+      return value | _newValue<
                               isWrite,
                               utils::front_v<typename current::newPositionList>, 
                               utils::front_t<typename current::rest>, 
@@ -387,7 +422,7 @@ private:
   }
 
   template<auto mask, auto number, auto position>
-  static uint32_t shiftedDirectValue(uint32_t value){
+  static uint32_t _shiftedDirectValue(uint32_t value){
     static constexpr bool isLeftShift = number > position ? true : false;
     static constexpr uint32_t shift = isLeftShift ? 
                      number - position : 
@@ -400,6 +435,6 @@ private:
     "Pin list has the repetitive numbers");
 };
  
-}// !namespace stm32f1::hardware
+}// !namespace controller
 
-#endif //! _STM32F1_PINLIST_HPP
+#endif // !_STM32F1_PINLIST_HPP

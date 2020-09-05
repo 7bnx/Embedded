@@ -11,7 +11,6 @@
 
 #include <cstddef>
 
-
 /*!
   @file
   @brief Circular buffer
@@ -34,7 +33,7 @@ public:
 	/*!
     @brief Check the emptyness of buffer
   */
-  //__attribute__ ((always_inline)) inline 
+  __attribute__ ((always_inline)) inline 
   bool IsEmpty() const{return  !static_cast<bool>(count);}
 
 	/*!
@@ -58,7 +57,7 @@ public:
   size_t Pop(T* destination, size_t length){
     if (length > count) length = count;
     auto currentHead = head;
-    head = head + length >= size ? 0 : head + length;
+    head = (head + length) % size;
     count -= length;
     for (size_t i = 0; i < length; ++i){
       if (currentHead >= size) {
@@ -72,6 +71,7 @@ public:
 	/*!
     @brief Read the head element of buffer
   */
+  __attribute__ ((always_inline)) inline
   const T& Front() const { return (const T&)buffer[head]; }
 
 	/*!
@@ -130,6 +130,7 @@ public:
     @brief Read element of buffer
     @param [in] index of element in buffer
   */
+  __attribute__ ((always_inline)) inline
   const T& operator[](size_t index){
     index = (index + head) % size;
     return const_cast<const T&>(buffer[index]);
@@ -138,33 +139,31 @@ public:
 	/*!
     @brief Get size of buffer
   */
-  //__attribute__ ((always_inline)) inline 
+  __attribute__ ((always_inline)) inline
   size_t GetSize() const { return size; }
 
 	/*!
     @brief Get current number of elements in buffer
   */
-  //__attribute__ ((always_inline)) inline 
+  __attribute__ ((always_inline)) inline
   size_t GetCount()const { return count; }
 
 	/*!
     @brief Clear the buffer
   */
-  //__attribute__ ((always_inline)) inline 
+  __attribute__ ((always_inline)) inline
   void Clear() { head = tail = count = 0; }
 
   /*!
     @brief Get the number of elements till tail or end of the buffer
   */
-  //__attribute__ ((always_inline)) inline 
-  size_t GetCountToBufferLastIndex() const { 
-    
-    return head >= tail ?  size - head : tail - head; }
+  __attribute__ ((always_inline)) inline 
+  size_t GetCountToBufferLastIndex() const { return head >= tail ?  size - head : tail - head; }
 
   /*!
     @brief Get the number of elements till buffer will be overflowed
   */
-  //__attribute__ ((always_inline)) inline 
+  __attribute__ ((always_inline)) inline 
   size_t GetCountToOverflow() const { return size - count; }
 
   /*!
@@ -193,13 +192,14 @@ public:
   /*!
     @brief Get address of buffer's head
   */
+  __attribute__ ((always_inline)) inline
   const auto GetHeadAddress(){return &buffer[head];}
 
 private:
-  volatile T buffer[size] {};
+  T buffer[size] {};
   size_t head = 0;
   size_t tail = 0;
-  size_t count = 0;
+  volatile size_t count = 0;
 };
 
 } //! namspace container

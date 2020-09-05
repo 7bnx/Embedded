@@ -10,6 +10,7 @@
 #define _TYPE_TRAITS_CUSTOM_HPP
 
 #include <cstdint>
+#include <cstddef>
 #include <type_traits>
 
 /*!
@@ -135,6 +136,34 @@ template<typename List>
 using pop_front_t = typename pop_front<List>::type;
 
 /*------------------------------End of Pop_Front----------------------------------*/
+
+
+
+/*----------------------------------Pop_Front_Number--------------------------------
+  Description:  Pop front number of types from list
+
+  using listOfTypes = Typelist<int, short, bool>;
+  using listOfValues = Valuelist<1,2,3,4,5,6,1>;
+
+  |-------------------|--------------------|------------------------|
+  |      Trait        |     Parameters     |         Result         |
+  |-------------------|--------------------|------------------------|
+  | pop_front_numbert |  <listOfTypes,1>   | Typelist<short, bool>  |
+  |-------------------|--------------------|------------------------| */
+
+
+template<typename List, size_t number>
+class pop_front_number : public pop_front_number<pop_front_t<List>, number-1>{};
+
+template<typename List>
+class pop_front_number<List, 1> : public pop_front<List>{};
+
+template<typename List, size_t number>
+using pop_front_number_t = typename pop_front_number<List, number>::type;
+
+/*------------------------------End of Pop_Front----------------------------------*/
+
+
 
 
 /*----------------------------------Push_Front--------------------------------------
@@ -496,16 +525,8 @@ using make_unique_t = typename make_unique<List>::type;
 
 
 /*-----------------------------------Expand-----------------------------------------
-  Description:  Check parameters list for empty and return bool value
-
-  using list1 = Typelist<int, short>;
-  using list2 = Typelist<float, double>
-
-  |------------|----------------|-------------------------------------|
-  |    Trait   |   Parameters   |               Result                |
-  |------------|----------------|-------------------------------------|
-  |  expand_t  | <list1, list2> | Typelist<int, short, float, double> |
-  |------------|----------------|-------------------------------------| */
+  Description:  Expand parameters list
+*/
 
 template<typename List, bool empty = utils::is_empty_v<List>>
 struct expand;
@@ -616,6 +637,30 @@ static constexpr uint32_t size_of_list_v = is_empty_v<List> ? 0U : 1U +
 
 /*-------------------------------End Size_Of_List---------------------------------*/
 
+
+
+/*---------------------------------Get_Element_Of_List------------------------------
+  Description:  Get element of the list
+
+  using listOfTypes = Typelist<int, double, float, bool>;
+
+  |------------------|--------------------|----------|
+  |       Trait      |     Parameters     |  Result  |
+  |------------------|--------------------|----------|
+  |   get_element_t  |  <listOfTypes, 1>  |  double  |
+  |------------------|--------------------|----------| */
+
+
+template<typename List, size_t number>
+class get_element : public get_element<pop_front_t<List>, number-1>{};
+
+template<typename List>
+class get_element<List, 0> : public front<List>{};
+
+template<typename List, size_t number>
+using get_element_t = typename get_element<List, number>::type;
+
+/*----------------------------End Get_Element_Of_List-----------------------------*/
 
 } // !namespace utils
 

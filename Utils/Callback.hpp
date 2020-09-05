@@ -2,7 +2,7 @@
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
 //  github:       https://github.com/7bnx/Embedded
-//  Description:  Lambda callback.
+//  Description:  Lambda callback
 //  TODO:
 //----------------------------------------------------------------------------------
 

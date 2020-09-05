@@ -2,7 +2,7 @@
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
 //  github:       https://github.com/7bnx/Embedded
-//  Description:  Handle HMI-Button.
+//  Description:  Handle HMI-Button
 //  TODO:
 //----------------------------------------------------------------------------------
 
@@ -32,6 +32,7 @@ namespace device{
 template<typename Pin, bool isActiveLow = false,
          uint32_t ticksDebounce = 30, uint32_t ticksLongPress = 1500>
 class Button{
+  
 public:
 
   /*!

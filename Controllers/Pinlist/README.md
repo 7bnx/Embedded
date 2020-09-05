@@ -9,7 +9,7 @@ template<typename... Pins>
 
 |Num | Parameter    | Description                                                                                   |
 | -  | ------------ | --------------------------------------------------------------------------------------------- |
-| 1  | Pins...      | Variadic template parameter. List of comma-separated single-pins or other pinlist or mix.     |
+| 1  | Pins...      | Variadic template parameter. List of comma-separated single-pins or other pinlist.            |
 
 
 ## Interface
@@ -24,17 +24,17 @@ template<typename... Pins>
 | 4  | void High()                                       | Set all pins in list to High-level                        |
 | 5  | void Low()                                        | Set all pins in list to Low-level                         |
 | 6  | void Write(uint32_t value)                        | Write value to pins in list                               |
-| 7  | operator= (uint32_t value)                        | Write value to pins in list                               |
-| 8  | uint32_t Read()                                   | Read the state of pins in list                            |
-| 9  | operator uint32_t()                               | Read the state of pins in list                            |
+| 7  | void Write<*pinNumber*>(bool state)                 | Set pin-level to state                                    |
+| 8  | operator= (uint32_t value)                        | Write value to pins in list                               |
+| 9  | uint32_t Read()                                   | Read the state of pins in list                            |
+| 10 | operator uint32_t()                               | Read the state of pins in list                            |
 
 ### Properties
 
 |Num | Property     | Description                                               |
 | -  | ------------ | --------------------------------------------------------- |
-| 1  | power        | Unique list of ports. Use in Power class                  |
-| 2  | pins         | Expanded list of pins. Use in other Pinlist               |
-| 3  | size         | Number of pins in list                                    |
+| 1  | size         | Number of pins in list                                    |
+| 2  | interface    | Parallel interface                                        |
 
 
 ## Static Asserts
@@ -49,9 +49,6 @@ template<typename... Pins>
 
 ```cpp
 ...
-#include "Pin.hpp"
-#include "Pinlist.hpp"
-#include "Power.hpp"
 
 using namespace controller;
 ...
@@ -66,7 +63,7 @@ list1::Init();
 list1::Write(4); // A1 = 1, A0 = 0, B9 = 0
 list1::Write(3); // A1 = 0, A0 = 1, B9 = 1
 list1::Write(2); // A1 = 0, A0 = 1, B9 = 0
-
+list1::Write<0>(true); // A1 = 0, A0 = 1, B9 = 1
 using A2 = Pin<GPIOA_BASE, 2, pinConfiguration::Output_Low_50MHz>;
 
 using list2 = Pinlist<

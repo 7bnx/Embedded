@@ -2,7 +2,7 @@
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
 //  github:       https://github.com/7bnx/Embedded
-//  Description:  Handle single Led operations.
+//  Description:  Handle single Led operations
 //  TODO:
 //----------------------------------------------------------------------------------
 
@@ -24,10 +24,11 @@ namespace device{
 /*!
   @brief Class of Led Object.
   @tparam Pin hardware-dependent output. Must implements field void Pin::Set(bool state)
-  @tparam isOnHigh sif true, Led starts emitting, when Pin goes high
+  @tparam isOnHigh if true, Led starts emitting, when Pin goes high
 */  
 template<typename Pin, bool isOnHigh = true>
 class Led{
+  
 public:
 
 	/*!
@@ -105,7 +106,7 @@ public:
     @param [in] state new emitting state
   */
   __attribute__ ((always_inline)) inline
-  const bool operator=(bool state){Set(state); return state;}
+  bool operator=(bool state){Set(state); return state;}
 
 private:  
   static inline bool isEnabled = true; 

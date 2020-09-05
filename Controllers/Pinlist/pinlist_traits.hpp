@@ -3,7 +3,7 @@
 //  e-mail:       agreement90@mail.ru
 //  github:       https://github.com/7bnx/Embedded
 //  Description:  Traits for list of pins 
-//  TODO:         Add description 
+//  TODO:          
 //----------------------------------------------------------------------------------
 
 #ifndef _PINLIST_TRAITS_HPP
@@ -11,7 +11,15 @@
 
 #include <cstddef>
 #include "type_traits_custom.hpp"
-#include "pin_configuration.hpp"
+
+
+/*!
+  @brief Declaration of Pinlist
+*/
+namespace controller{
+  template<typename... Pins>
+  class Pinlist;
+}
 
 /*!
   @brief Namespace for pinlist traits
@@ -92,7 +100,7 @@ namespace pinlist_traits{
   struct set_config_to_pins<config, utils::Typelist<Head, Tail...>>{
 
     static constexpr auto frontNumber = Head::number;
-    using newPin = controller::abstarct::Pin<Head::baseAddress, Head::number, config>;
+    using newPin = controller::Pin<Head::baseAddress, Head::number, config>;
     using next = utils::Typelist<Tail...>;
     using rest = typename set_config_to_pins<config, next>::type;
     using type = utils::push_front_t<rest, newPin>;
@@ -113,14 +121,14 @@ namespace pinlist_traits{
 
   template<auto gpioBase, auto config, auto startPin, auto endPin>
   struct generate_pinlist{
-    using pin = controller::abstarct::Pin<gpioBase, startPin, config>;
+    using pin = controller::Pin<gpioBase, startPin, config>;
     using rest = typename generate_pinlist<gpioBase, config, startPin + 1, endPin>::type;
     using type = std::conditional_t<startPin < endPin, utils::push_front_t<rest, pin>, rest>;
   };
 
   template<auto gpioBase, auto config, auto startPin>
   struct generate_pinlist<gpioBase, config, startPin, startPin>{
-    using pin = controller::abstarct::Pin<gpioBase, startPin, config>;
+    using pin = controller::Pin<gpioBase, startPin, config>;
     using type = utils::Typelist<pin>;
   };
 
@@ -299,6 +307,31 @@ namespace pinlist_traits{
   template<typename pinsList>
   using make_port_list_t = utils::make_unique_t<typename port_power_list<pinsList>::port_list>;
 
+// End of Make list of unique ports and power value
+
+// Pop front pins
+
+  template<typename first, typename pinlist, bool empty = utils::is_empty_v<pinlist>>
+  struct pop_front_pins{
+    using front = utils::front_t<pinlist>;
+    using next = utils::pop_front_t<pinlist>;
+    using pre = controller::Pinlist<first, front>;
+    using rest = typename pop_front_pins<pre, next>::type; 
+    using type = std::conditional_t<utils::is_empty_v<next>, pre, controller::Pinlist<rest>>;
+  };
+
+  template<typename first, typename pinlist>
+  struct pop_front_pins<first, pinlist, true>{
+    using type = first;
+  };
+
+  template<size_t number, typename pins>
+  using pop_front_pins_t = typename pinlist_traits::pop_front_pins<
+                                              utils::front_t<utils::pop_front_number_t<pins, number>>, 
+                                              utils::pop_front_number_t<pins, number + 1>
+                                              >::type;
+
+// End of Pop front pins
 
 } //!namspace pinlist_traits
 

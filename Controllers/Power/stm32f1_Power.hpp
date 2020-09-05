@@ -11,16 +11,21 @@
 
 #include <cstdint>
 #include "stm32f10x.h"
-#include "type_traits_custom.hpp"
-
-namespace stm32f1::hardware{
+#include "power.hpp"
 
 /*!
-  @brief Power Driver for STM32F1 series. Don't use it Directly
-*/  
-class _PowerImplementation{
+  @brief Controller's peripherals devices
+*/
+namespace controller{
 
-public:
+/*!
+  @brief Power Driver for STM32F1 series
+*/  
+class Power: public common::Power<Power>{
+
+	Power() = delete;
+
+	friend common::Power<Power>;
 
   /*!
     @brief Set peripherial Power.
@@ -28,12 +33,12 @@ public:
   */
 	template<uint32_t... periphBase>
 	__attribute__ ((always_inline)) inline 
-	static void Set(bool state){
-		if constexpr(constexpr auto value = GetAHBENR<periphBase...>(); value)
+	static void _Set(bool state){
+		if constexpr(constexpr auto value = _GetAHBENR<periphBase...>(); value)
 			RCC->AHBENR = state ? RCC->AHBENR | value : RCC->AHBENR &(~value);
-		if constexpr(constexpr auto value = GetAPB1ENR<periphBase...>(); value)
+		if constexpr(constexpr auto value = _GetAPB1ENR<periphBase...>(); value)
 			RCC->APB1ENR = state ? RCC->APB1ENR | value : RCC->APB1ENR &(~value);
-		if constexpr(constexpr auto value = GetAPB2ENR<periphBase...>(); value)
+		if constexpr(constexpr auto value = _GetAPB2ENR<periphBase...>(); value)
 			RCC->APB2ENR = state ? RCC->APB2ENR | value : RCC->APB2ENR &(~value);
 	}
 
@@ -42,71 +47,33 @@ public:
     @tparam <List...> Variadic template parameter. List of peripheral devices
   */
 	template<typename... List>
-	static void Set(bool state){
+	__attribute__ ((always_inline)) inline
+	static void _Set(bool state){
 	  using expandedList = utils::expand_t<typename List::power...>;
-		//expandedList::a;
-		
+
 		if constexpr(constexpr auto value = powerValue<powerBus::AHB, expandedList>::value; value)
 			RCC->AHBENR = state ? RCC->AHBENR | value : RCC->AHBENR &(~value);
 		if constexpr(constexpr auto value = powerValue<powerBus::APB1, expandedList>::value; value)
 			RCC->APB1ENR = state ? RCC->APB1ENR | value : RCC->APB1ENR &(~value);
 		if constexpr(constexpr auto value = powerValue<powerBus::APB2, expandedList>::value; value)
 			RCC->APB2ENR = state ? RCC->APB2ENR | value : RCC->APB2ENR &(~value);
-		
 	}
 
-  /*!
-    @brief Enable peripherial Power
-    @tparam <uint32_t...periphBase> Variadic template parameter. Base address of enabling peripheria (e.g.: GPIOA_BASE)
-  */
 	template<uint32_t... periphBase>
 	__attribute__ ((always_inline)) inline
-	static void Enable(){Set<periphBase...>(true);}
-
-  /*!
-    @brief Enable peripherial Power
-    @tparam <List...> Variadic template parameter. List of peripheral devices
-  */
-	template<typename... List>
-	__attribute__ ((always_inline)) inline
-	static void Enable(){
-		Set<List...>(true);
-	}
-
-  /*!
-    @brief Disable peripherial Power.
-    @tparam <uint32_t...periphBase> Variadic template parameter. Base address of enabling peripheria (e.g.: GPIOA_BASE)
-  */
-	template<uint32_t... periphBase>
-	__attribute__ ((always_inline)) inline
-	static void Disable(){Set<periphBase...>(false);}
-
-  /*!
-    @brief Disable peripherial Power.
-    @tparam <List...> Variadic template parameter. List of peripheral devices
-  */
-	template<typename... List>
-	__attribute__ ((always_inline)) inline
-	static void Disable(){
-		Set<List...>(false);
-	}
-
-private:
-
-	_PowerImplementation() = delete;
-
-	template<uint32_t... periphBase> 
-	static constexpr uint32_t GetAHBENR(){
+	static constexpr uint32_t _GetAHBENR(){
 		return (... | isAHBENR<periphBase>);
 	}
 
-	template<uint32_t... periphBase> 
-	static constexpr uint32_t GetAPB1ENR(){
+	template<uint32_t... periphBase>
+	__attribute__ ((always_inline)) inline
+	static constexpr uint32_t _GetAPB1ENR(){
 		return (...| isAPB1ENR<periphBase>);
 	}
 
-	template<uint32_t... periphBase> 
-	static constexpr uint32_t GetAPB2ENR(){
+	template<uint32_t... periphBase>
+	__attribute__ ((always_inline)) inline
+	static constexpr uint32_t _GetAPB2ENR(){
 		return (...| isAPB2ENR<periphBase>);
 	}
 
@@ -245,7 +212,7 @@ private:
 	};
 
 	template<powerBus bus, auto value>
-  static constexpr uint32_t busValue = bus == powerBus::AHB ?   isAHBENR<value> : 
+  static constexpr uint32_t busValue = bus == powerBus::AHB  ?  isAHBENR<value> : 
 																			 bus == powerBus::APB1 ?  isAPB1ENR<value> :
 																			 bus == powerBus::APB2 ?	isAPB2ENR<value> : 0U;
 
@@ -270,6 +237,6 @@ private:
 	static constexpr uint32_t powerValue_v = powerValue<bus, utils::Typelist<List...>>::value;
 };
 
-} // !stm32f1::hardware
+} // !controller
 
 #endif // !_STM32F1_POWER_HPP

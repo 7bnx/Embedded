@@ -2,7 +2,7 @@
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
 //  github:       https://github.com/7bnx/Embedded
-//  Description:  Hardware-dependent driver for UART.  
+//  Description:  Hardware-dependent driver for UART. STM32F1-series
 //  TODO:
 //----------------------------------------------------------------------------------
 
@@ -14,10 +14,11 @@
 #include "stm32f10x.h"
 #include "stm32f1_Clock.hpp"
 #include "stm32f1_Pinlist.hpp"
-#include "Circular_Buffer.hpp"
-#include "Callback.hpp"
+#include "stm32f1_Power.hpp"
+#include "connection.hpp"
+#include "interrupt.hpp"
 
-namespace stm32f1::hardware{
+namespace controller{
 
 /*!
   @brief UART Driver for STM32F1 series. Don't use it Directly
@@ -30,8 +31,12 @@ namespace stm32f1::hardware{
 */  
 template<uint32_t baseUART, size_t txBufferSize, size_t rxBufferSize,
          bool isTXviaDMA = true, bool isRXviaDMA = true, bool isPinsRemap = false>
-class _UARTImplementation{
+class UART: public common::connection<uint8_t, txBufferSize, rxBufferSize, 
+                  UART<baseUART, txBufferSize, rxBufferSize, isTXviaDMA, isRXviaDMA, isPinsRemap>>{
 
+private:
+  using baseConnection = common::connection<uint8_t, txBufferSize, rxBufferSize, 
+                          UART<baseUART, txBufferSize, rxBufferSize, isTXviaDMA, isRXviaDMA, isPinsRemap>>;
 public:
 
   /*!
@@ -39,16 +44,16 @@ public:
     @tparam <baud> desired baud-rate for uart
     @tparam <configurePins> if true, then pins will be initialized
   */  
-  template<uint32_t baud, bool configurePins = false>
+  template<uint32_t baud>
   static void Init(){
     base()->CR1 = initValueCR1;
     base()->BRR = CalcValueBRR<baud>();
-    //base()->SR = 0; // To reset Status register, thereis should be some time after enabling UART in CR1
+    //base()->SR = 0; // To reset Status register, there is should be some time after enabling UART in CR1
     base()->CR3 = USART_CR3_EIE | (isTXviaDMA ? USART_CR3_DMAT : 0U) | (isRXviaDMA ? USART_CR3_DMAR : 0U);
     if constexpr (isTXviaDMA || isRXviaDMA){
       if constexpr(isRXviaDMA){
         DMA_Channel_rx()->CPAR = baseUART + 4;
-        DMA_Channel_rx()->CMAR = reinterpret_cast<uint32_t>(rxBuffer.GetHeadAddress());
+        DMA_Channel_rx()->CMAR = reinterpret_cast<uint32_t>(baseConnection::rxBuffer.GetHeadAddress());
         DMA_Channel_rx()->CNDTR = rxBufferSize;
         DMA_Channel_rx()->CCR  =  DMA_CCR1_EN // Enable DMA channel
                                |  DMA_CCR1_MINC // Memory increment
@@ -63,8 +68,6 @@ public:
                                |  DMA_CCR1_TCIE;// Full Transfer complete ISR
       }
     }
-    if constexpr (configurePins) InitPins();
-    if constexpr (isPinsRemap) AFIO->MAPR |= uartPins[pinsGroup()][2];
   }
 
   /*!
@@ -77,104 +80,14 @@ public:
   }
 
   /*!
-    @brief Write data to uart transmitter
-    @param [in] data to send
-    @return true, if tx buffer not overflowed
-  */ 
-  static bool Write(uint8_t data){
-    bool isOverflow = txBuffer.Push(data);
-    Send();
-    return isOverflow;
-  }
-
-  /*!
-    @brief Write data to uart transmitter
-    @param [in] pointer to data array
-    @param [length] length of data to write
-    @return true, if tx buffer not overflowed
-  */ 
-  static bool Write(const uint8_t* data, size_t length){
-    bool isOverflow = txBuffer.Push(data, length);
-    Send();
-    return isOverflow;
-  }
-
-  /*!
-    @brief Get front element of rx buffer
-  */ 
-  static uint8_t Front(){return rxBuffer.Front();}
-
-  /*!
-    @brief Pop front element of rx buffer
-  */ 
-  static uint8_t Pop(){
-    if(rxBuffer.GetCount() < 2)
-      isCallbackRxNotEmptyCalled = false;
-    return rxBuffer.Pop();
-  }
-
-  /*!
-    @brief Pop data to destination array
-    @param [out] destination pointer to array
-    @param [in] length to pop
-    @return number of poped elements
-  */ 
-  static size_t Pop(uint8_t* destination, size_t length){
-    if(rxBuffer.GetCount() <= length)
-      isCallbackRxNotEmptyCalled = false;
-    return rxBuffer.Pop(destination, length);
-  }
-
-  /*!
-    @brief Get data from rx buffer by index
-    @param [in] index of rx buffer
-    @return data by index. If rx buffer is empty - return front value
-  */ 
-  static uint8_t GetAt(size_t index){
-    return rxBuffer[index];
-  }
-
-  /*!
-    @brief Get data from rx buffer by index
-    @param [in] index of rx buffer
-    @return data by index. If rx buffer is empty - return front value
-  */ 
-  uint8_t operator[](size_t index){return GetAt(index);}
-
-  /*!
-    @brief Check the rx buffer
-    @return true if rx buffer is empty
-  */ 
-  static bool IsRxEmpty(){
-    if constexpr(isRXviaDMA) CheckRxDMA();
-    return rxBuffer.IsEmpty();
-  }
-
-  /*!
-    @brief Check the tx buffer
-    @return true if tx buffer is empty
-  */ 
-  static bool IsTxEmpty(){return txBuffer.IsEmpty();}
-
-  /*!
-    @brief Return number of elements in rx buffer
-  */ 
-  static size_t GetRxCount(){return rxBuffer.GetCount();}
-
-  /*!
-    @brief Return number of elements in tx buffer
-  */ 
-  static size_t GetTxCount(){return txBuffer.GetCount();}
-
-  /*!
     @brief DMA TX Handler
   */ 
   static void ISR_DMA_TX(){
     DMA1->IFCR  = dmaIsrClearValue<DMA_Channel_TX_Number>;
     DMA_Channel_tx()->CCR &= ~DMA_CCR1_EN;
-    if (!txBuffer.IsEmpty())
-      EnableRxDMA();
-    else if (!__NVIC_GetEnableIRQ(uartIRQn)) CallbackTxIdle(); 
+    if (!baseConnection::txBuffer.IsEmpty())
+      EnableTxDMA();
+    else if (!__NVIC_GetEnableIRQ(uartIRQn)) baseConnection::CallbackTxIdle(); 
   }
 
   /*!
@@ -194,28 +107,28 @@ public:
     uint8_t drValue = base()->DR;
 
     if (CR1 & USART_CR1_TXEIE && valueSR & USART_SR_TXE){
-      if (!txBuffer.IsEmpty()) base()->DR = txBuffer.Pop();
+      if (!baseConnection::txBuffer.IsEmpty()) base()->DR = baseConnection::txBuffer.Pop();
       else base()->CR1 &=~ USART_CR1_TXEIE;
 	  }
 
     if (CR1 & USART_CR1_RXNEIE && valueSR & USART_SR_RXNE){
-      rxBuffer.Push(drValue);
+      baseConnection::rxBuffer.Push(drValue);
     }
 
     if (valueSR & USART_SR_TC){
       base()->SR &=~USART_SR_TC;
-      CallbackTxIdle();
+      baseConnection::CallbackTxIdle();
     }
 
     if (valueSR & USART_SR_IDLE){
-      if (!isCallbackRxNotEmptyCalled){
-        CallbackRxNotEmpty();
-        isCallbackRxNotEmptyCalled = true;
+      if (!baseConnection::isCallbackRxNotEmptyCalled){
+        baseConnection::CallbackRxNotEmpty();
+        baseConnection::isCallbackRxNotEmptyCalled = true;
       }
     }
 
     if(valueSR & (USART_SR_ORE | USART_SR_PE | USART_SR_NE | USART_SR_FE)){
-      CallbackError();
+      baseConnection::CallbackError();
     }
   }
 
@@ -232,7 +145,7 @@ public:
     @brief Get UART Errors
   */
   static const auto& GetErrors(){
-    if(!__NVIC_GetEnableIRQ(uartIRQn))
+    if constexpr (isTXviaDMA && isRXviaDMA)
       valueSR = base()->SR;
     error.parity = valueSR & USART_SR_PE;
     error.overrun = valueSR & USART_SR_ORE;
@@ -241,24 +154,7 @@ public:
     return error;
   }
 
-  /*!
-    @brief Callback for TX Idle state
-  */
-  static inline utils::Callback CallbackTxIdle;
-
-  /*!
-    @brief Callback for RX empty state
-  */
-  static inline utils::Callback CallbackRxNotEmpty;
-
-  /*!
-    @brief Callback for UART error
-  */
-  static inline utils::Callback CallbackError;
-
 private:
-  static inline container::CircularBuffer<uint8_t, txBufferSize> txBuffer;
-  static inline container::CircularBuffer<uint8_t, rxBufferSize> rxBuffer;
 
   struct errorUart{
     bool parity;
@@ -266,35 +162,44 @@ private:
     bool noise;
     bool frame;
   };
+  
   static inline errorUart error;
   static inline size_t rxBuffer_prevCount = rxBufferSize;
-  static inline bool isCallbackRxNotEmptyCalled = false;
   static inline uint32_t valueSR = 0;
 
   static void Send(){
     if constexpr(!isTXviaDMA) base()->CR1 |= USART_CR1_TXEIE; // Enable transmit
     else 
-      if (!(DMA_Channel_tx()->CCR & DMA_CCR1_EN)) EnableRxDMA();
+      if (!(DMA_Channel_tx()->CCR & DMA_CCR1_EN)) EnableTxDMA();
   }
 
-  static void EnableRxDMA(){
-    DMA_Channel_tx()->CNDTR = txBuffer.GetCountToBufferLastIndex();
-    DMA_Channel_tx()->CMAR = (uint32_t)(txBuffer.GetHeadAddress());
-    txBuffer.SetHeadToLastIndex();
+  __attribute__ ((always_inline)) inline
+  static void CheckTxBuffer(){ }
+
+  __attribute__ ((always_inline)) inline
+  static void CheckRxBuffer(){ 
+    if constexpr(isRXviaDMA) 
+      CheckRxDMA();
+  }
+
+  static void EnableTxDMA(){
+    DMA_Channel_tx()->CNDTR = baseConnection::txBuffer.GetCountToBufferLastIndex();
+    DMA_Channel_tx()->CMAR = (uint32_t)(baseConnection::txBuffer.GetHeadAddress());
+    baseConnection::txBuffer.SetHeadToLastIndex();
     DMA_Channel_tx()->CCR |= DMA_CCR1_EN;
   }
 
   static void CheckRxDMA(){
     size_t dmaCNTDR = DMA_Channel_rx()->CNDTR;
-     if(rxBuffer_prevCount != dmaCNTDR){
+     if(baseConnection::rxBuffer_prevCount != dmaCNTDR){
       size_t diff = rxBuffer_prevCount > dmaCNTDR ? 
                     rxBuffer_prevCount - dmaCNTDR : 
                     rxBufferSize - dmaCNTDR + rxBuffer_prevCount;
       rxBuffer_prevCount = dmaCNTDR;
-      rxBuffer.AddToTail(diff);
-      if(!isCallbackRxNotEmptyCalled){
-        isCallbackRxNotEmptyCalled = true;
-        CallbackRxNotEmpty();
+      baseConnection::rxBuffer.AddToTail(diff);
+      if(!baseConnection::isCallbackRxNotEmptyCalled){
+        baseConnection::isCallbackRxNotEmptyCalled = true;
+        baseConnection::CallbackRxNotEmpty();
       }
     }
   }
@@ -319,12 +224,6 @@ private:
                                         baseUART == USART2_BASE ? 6: 
                                         baseUART == USART3_BASE ? 4: 3) - 1;
 
-  static void InitPins(){
-    constexpr uint8_t group = pinsGroup();
-    _PinlistImplementation<
-      _PinImplementation<uartPinsBase[group][0], uartPins[group][0], controller::pinConfiguration::Alternative_PushPull>,
-      _PinImplementation<uartPinsBase[group][1], uartPins[group][1], controller::pinConfiguration::Input_PullUp>>::Init();
-  }
 
   static constexpr uint8_t pinsGroup(){
     if (baseUART == USART1_BASE){
@@ -340,14 +239,18 @@ private:
     }
   }
 
-  static constexpr uint8_t uartPins[][3] = {{9, 10, 0},
-                                            {6, 7, 4},
-                                            {2, 3, 0},
-                                            {5, 6, 8},
-                                            {10, 11, 0},
-                                            {8, 9, 48},
-                                            {10, 11, 16}};
+  static constexpr uint8_t uartPins[][2] = {{9, 10},
+                                            {6, 7},
+                                            {2, 3},
+                                            {5, 6},
+                                            {10, 11},
+                                            {8, 9},
+                                            {10, 11}};
 
+  static constexpr uint32_t pinsRemapValue = baseUART == USART1_BASE ? 4U :
+                                             baseUART == USART2_BASE ? 8U : 
+                                             baseUART == USART3_BASE ? 16U : 
+                                                                             0U;
   static constexpr uint32_t uartPinsBase[][2] = { {GPIOA_BASE, GPIOA_BASE},
                                                   {GPIOB_BASE, GPIOB_BASE}, 
                                                   {GPIOA_BASE, GPIOA_BASE},
@@ -359,6 +262,16 @@ private:
   static constexpr auto uartIRQn = baseUART == USART1_BASE ? IRQn::USART1_IRQn :
                                    baseUART == USART2_BASE ? IRQn::USART2_IRQn :
                                                              IRQn::USART3_IRQn;
+
+  static constexpr auto uartDMAtxIRQn = baseUART == USART1_BASE ? IRQn::DMA1_Channel4_IRQn :
+                                        baseUART == USART2_BASE ? IRQn::DMA1_Channel7_IRQn :
+                                        baseUART == USART3_BASE ? IRQn::DMA1_Channel2_IRQn :
+                                                                  IRQn::DMA1_Channel5_IRQn ;
+
+  static constexpr auto uartDMArxIRQn = baseUART == USART1_BASE ? IRQn::DMA1_Channel5_IRQn :
+                                        baseUART == USART2_BASE ? IRQn::DMA1_Channel6_IRQn :
+                                        baseUART == USART3_BASE ? IRQn::DMA1_Channel4_IRQn : 
+                                                                  IRQn::DMA1_Channel3_IRQn ;
 
   static constexpr auto initValueCR1 = USART_CR1_UE | // Enable USART
                                        USART_CR1_TE | // Enable Transmit
@@ -376,14 +289,20 @@ private:
   __attribute__ ((always_inline)) inline 
   static uint32_t CalcValueBRR(){ 
     return ((baud>>1) + (baseUART == USART1_BASE ? 
-    _ClockImplementation::APB2() : 
-    _ClockImplementation::APB1()))/baud;
+    Clock::APB2() : 
+    Clock::APB1()))/baud;
   }
 
-public:
+  friend Power;
+  friend Interrupt;
+  template<typename...>
+  friend class Pinlist;
+
+  friend baseConnection;
+
   using pins = utils::Typelist<
-      _PinImplementation<uartPinsBase[pinsGroup()][0], uartPins[pinsGroup()][0], controller::pinConfiguration::Alternative_PushPull>,
-      _PinImplementation<uartPinsBase[pinsGroup()][1], uartPins[pinsGroup()][1], controller::pinConfiguration::Input_PullUp>>;
+      Pin<uartPinsBase[pinsGroup()][0], uartPins[pinsGroup()][0], pinConfiguration::Alternative_PushPull>,
+      Pin<uartPinsBase[pinsGroup()][1], uartPins[pinsGroup()][1], pinConfiguration::Input_Float>>;
 
   using power = utils::Typelist<utils::ctv<baseUART>, 
                                 utils::ctv<uartPinsBase[pinsGroup()][0]>, 
@@ -391,8 +310,15 @@ public:
                                 utils::ctv<AFIO_BASE>,
                                 utils::ctv<isTXviaDMA || isRXviaDMA ? DMA1_BASE: 0U>>;
 
+  using interrupts = utils::make_unique_t<utils::Typelist< 
+                                      std::conditional_t<isTXviaDMA, utils::ctv<uartDMAtxIRQn>, utils::ctv<uartIRQn>>,
+                                      std::conditional_t<isTXviaDMA, utils::ctv<uartDMArxIRQn>, utils::ctv<uartIRQn>>
+                                        >>;
+
+  using remap = utils::ctv<pinsRemapValue>;
+
 };
 
-} //!namspace stm32f1::hardware
+} // !namspace controller
 
 #endif //!_STM32F1_UART_HPP
