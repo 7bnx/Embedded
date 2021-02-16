@@ -2,15 +2,15 @@
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
 //  github:       https://github.com/7bnx/Embedded
-//  Description:  Hardware-dependent library for Pin driver of stm32f1
+//  Description:  Hardware-dependent library for Pin driver of stm32f0
 //  TODO:         
 //----------------------------------------------------------------------------------
 
-#ifndef _STM32F1_PIN_HPP
-#define _STM32F1_PIN_HPP
+#ifndef _STM32F0_PIN_HPP
+#define _STM32F0_PIN_HPP
 
 #include "../Common/Compiler/Compiler.h"
-#include "stm32f1_Pin_Helper.hpp"
+#include "stm32f0_Pin_Helper.hpp"
 
 /*!
   @brief Controller's peripherals devices
@@ -22,14 +22,14 @@ namespace wrapper{
 struct Pins{
 
 /*!
-  @brief Pin Driver for STM32F1 series. Don't use it Directly
-  @tparam <portID> id of selected Port. E.g.: GPIOA = 0
+  @brief Pin Driver for STM32F0 series. Don't use it Directly
+  @tparam <portID> number of port. E.g.: GPIOA = 0
   @tparam <number> number of pin. From 0 to 15
   @tparam <config> pin configuration
   @tparam <remapValue> value to remap pin fo alternative function
 */
 template<uint32_t portID, uint32_t number, configuration::pin config = configuration::pin::Default, uint32_t remapValue = 0>
-class Pin: public interfaces::IPin<Pin<portID, number, config, remapValue>>, public controller::hardware::Registers,
+class Pin: public interfaces::IPin<Pin<portID, number, config, remapValue>>, protected controller::hardware::Registers,
            public helper::pin::Helper<Pin<portID, number, config, remapValue>, portID, number, config, remapValue>{
 
   using Helper = helper::pin::Helper<Pin<portID, number, config>, portID, number, config, remapValue>;
@@ -59,11 +59,11 @@ class Pin: public interfaces::IPin<Pin<portID, number, config, remapValue>>, pub
   }
 
   __FORCE_INLINE static void _High(){
-    Registers::_Write<Helper::address::BSRR, Helper::mask::pin>(); 
+    Registers::_Write<Helper::address::BSRR, Helper::mask::pin, Helper::mask::pin>(); 
   }
 
   __FORCE_INLINE static void _Low(){ 
-    Registers::_Write<Helper::address::BRR, Helper::mask::pin>(); 
+    Registers::_Write<Helper::address::BRR, Helper::mask::pin, Helper::mask::pin>(); 
   }
 
   __FORCE_INLINE static bool _Get(){ 
@@ -76,7 +76,7 @@ class Pin: public interfaces::IPin<Pin<portID, number, config, remapValue>>, pub
     }
 
   __FORCE_INLINE static void _Toggle(){
-    auto value = (Helper::mask::pin << 16) | ~Registers::_Read<Helper::address::IDR, Helper::mask::pin>();
+    auto value = (Helper::mask::pin << 16) | ~Registers::_Read<Helper::address::ODR, Helper::mask::pin>();
     Registers::_Write<Helper::address::BSRR, Helper::mask::pin | (Helper::mask::pin << 16)>(value); 
   }
   
@@ -95,9 +95,8 @@ public constructor::Ports::PortB_16<wrapper::Pins>,
 public constructor::Ports::PortC_16<wrapper::Pins>,
 public constructor::Ports::PortD_16<wrapper::Pins>,
 public constructor::Ports::PortE_16<wrapper::Pins>,
-public constructor::Ports::PortF_16<wrapper::Pins>,
-public constructor::Ports::PortG_16<wrapper::Pins>{};
+public constructor::Ports::PortF_16<wrapper::Pins>{};
 
 } //!namespace controller
 
-#endif //!_STM32F1_PIN_HPP
+#endif //!_STM32F0_PIN_HPP

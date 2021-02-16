@@ -8,8 +8,9 @@
 
 namespace device{
 
+
 /*!
-  @brief Led Handler. Put it in your infinity loop, or task. Each call increments Led's state counter
+  @brief Led Handler. Call it in super loop, or task. Each call increments Led's state counter
 */
 template<PARAMETERS>
 void CLASS::Handler(){
@@ -20,13 +21,12 @@ void CLASS::Handler(){
       ticksPauseCurrent++;
       if (ticksPauseCurrent >= ticksPause){
       /*If counter of pause between blinks sequences reaches the limit ->*/
-        qtyBlinksRowCurrent++;
-        ticksPauseCurrent = 0;
-        qtyBlinksCurrent = 0;
-        if ((qtyBlinksRowCurrent >= qtyBlinksRow && 
-           ticksPause && qtyBlinksRow) || !ticksPause) ticksOn = 0;       
+        ticksPauseCurrent = qtyBlinksCurrent = 0; 
+        qtyBlinksRowCurrent++;  
+        if ((qtyBlinksRowCurrent >= qtyBlinksRow && qtyBlinksRow) || (!ticksPause && !qtyBlinksRow))
+          ticksOn = 0;
       }
-    } else BlinkHandler();
+    } else _BlinkHandler();
   }
 }
 
@@ -37,8 +37,8 @@ void CLASS::Handler(){
   @param [in] qtyBlinks number of times the Led will be blinking. = 0 - infinity blinking cycle
 */
 template<PARAMETERS>
-void CLASS::Blink(uint32_t ticksOn, uint32_t ticksOff, uint32_t qtyBlinks){
-  BlinkRow(ticksOn,ticksOff, qtyBlinks);
+void CLASS::Blink(size_t ticksOn, size_t ticksOff, size_t qtyBlinks){
+  BlinkRow(ticksOn, ticksOff, qtyBlinks);
 }
 
 /*!
@@ -51,12 +51,10 @@ void CLASS::Blink(uint32_t ticksOn, uint32_t ticksOff, uint32_t qtyBlinks){
   @param [in] qtyBlinksRow number of times the blinking sequence. = 0 infinity cycle
 */
 template<PARAMETERS>
-void CLASS::BlinkRow(uint32_t ticksOn, uint32_t ticksOff, 
-                     uint32_t qtyBlinks, uint32_t ticksPause, uint32_t qtyBlinksRow){
-  if (isEnabled && ticksOn){
-    Pin::Set(pinStateToSetOn);
-    isOn = true;
-    SetParam(ticksOn, ticksOff, qtyBlinks, ticksPause, qtyBlinksRow);
+void CLASS::BlinkRow(size_t ticksOn, size_t ticksOff, size_t qtyBlinks, size_t ticksPause, size_t qtyBlinksRow){
+  if (isEnabled){
+    _SetEmmitState(true, pinStateEmmit);
+    _SetParameters(ticksOn, ticksOff, qtyBlinks, ticksPause, qtyBlinksRow);
   }
 }
 
@@ -65,8 +63,10 @@ void CLASS::BlinkRow(uint32_t ticksOn, uint32_t ticksOff,
 */
 template<PARAMETERS>
 void CLASS::Set(bool state){
-  bool pinState = state ? pinStateToSetOn : !pinStateToSetOn;
-  SetLedHelper(state, pinState);
+  if (isEnabled){
+    ticksOn = 0;
+    _SetEmmitState(state, !state ^ pinStateEmmit);
+  }
 }
 
 /*!
@@ -74,7 +74,7 @@ void CLASS::Set(bool state){
 */
 template<PARAMETERS>
 void CLASS::On(){
-  SetLedHelper(true, pinStateToSetOn);
+  Set(true);
 }
 
 /*!
@@ -82,7 +82,7 @@ void CLASS::On(){
 */
 template<PARAMETERS>
 void CLASS::Off(){
-  SetLedHelper(false, !pinStateToSetOn);
+  Set(false);
 }
 
 /*!
@@ -94,41 +94,36 @@ void CLASS::Toggle(){
 }
 
 template<PARAMETERS>
-void CLASS::SetLedHelper(bool isLedOn, bool pinState) {
-  if (isEnabled) {
-    Pin::Set(pinState);
-    isOn = isLedOn;
-  }
+void CLASS::_SetEmmitState(bool isLedOn, bool pinState) {
+  Pin::Set(pinState);
+  isOn = isLedOn;
 }
 
 template<PARAMETERS>
-void CLASS::SetParam(uint32_t _ticksOn, uint32_t _ticksOff, 
-                    uint32_t _qtyBlinks, uint32_t _ticksPause, uint32_t _qtyBlinksRow){
+void CLASS::_SetParameters(size_t _ticksOn, size_t _ticksOff, size_t _qtyBlinks, size_t _ticksPause, size_t _qtyBlinksRow){
   ticksOn = _ticksOn;
   ticksOff = _ticksOff;
-  qtyBlinks = _qtyBlinks;
   ticksPause = _ticksPause;
-  qtyBlinksRow = _qtyBlinksRow;
   ticksToNextState = _ticksOn;
-  ticksBlinkCurrent = 0;
   ticksPauseCurrent = 0;
+  qtyBlinks = _qtyBlinks;
+  qtyBlinksRow = _qtyBlinksRow;
   qtyBlinksCurrent = 0;
   qtyBlinksRowCurrent = 0;
 }
 
 template<PARAMETERS>
-void CLASS:: BlinkHandler(){
-  ticksBlinkCurrent++;
-  if (ticksBlinkCurrent >= ticksToNextState){
-		ticksToNextState = isOn ? ticksOff : ticksOn;
-    if (isOn)qtyBlinksCurrent++;
-		isOn = !isOn;
-    Pin::Set(isOn ? pinStateToSetOn : !pinStateToSetOn);
-    ticksBlinkCurrent = 0;
+void CLASS::_BlinkHandler(){
+  if (!ticksToNextState--){
+    if (isOn){
+      ticksToNextState = ticksOff;
+      qtyBlinksCurrent++;
+    } else  ticksToNextState = ticksOn;
+    _SetEmmitState(!isOn, (bool)(isOn ^ pinStateEmmit));
   }
 }
 
-} // !device
+} // ! namespace device
 
 #undef PARAMETERS
 #undef CLASS

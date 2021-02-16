@@ -12,20 +12,22 @@
 #define _STM32F1_CLOCK_HPP
 
 #include <cstdint>
-#include "stm32f1_Pin.hpp"
-#include "stm32f1_Pinlist.hpp"
-#include "stm32f1_Power.hpp"
-#include "clock.hpp"
+#include "../Common/Compiler/Compiler.h"
+#include "../Interfaces/IPower.hpp"
+#include "../Pin/stm32f1_Pin.hpp"
+#include "../Pinlist/stm32f1_Pinlist.hpp"
 
 /*!
   @brief Controller's peripherals devices
 */
 namespace controller{
 
+namespace configuration::clock{
+
 /*!
   @brief Configuration for MCO(Microcontroller clock output)
 */ 
-enum class clockSourceMCO{
+enum class mco{
 
   /*! @brief No clock output at pin*/ 
   NO_CLOCK = 0UL,
@@ -40,333 +42,258 @@ enum class clockSourceMCO{
   HSE_CLOCK = 0x6000000UL,
 
   /*! @brief PLL clock divided by 2 selected*/ 
-  PLL_DIV2_CLOCK = 0x7000000
+  PLL_DIV2_CLOCK = 0x7000000UL
 };
 
+enum class source{
+  HSI = 0,
+  HSE = 1
+};
+
+} // !namespace configuration::clock
+
 /*!
-  @brief Clock Driver for STM32F1 series. Don't use it Directly
+  @brief Clock Driver for STM32F1 series
 */ 
-class Clock: public common::Clock<Clock>{
+class Clock: private hardware::Registers{
+
 public:
 
   /*!
-    @brief Enable or disable MCO
-    @tparam <src> source of MCO. Set to clockSourceMCO::NO_CLOCK to disable MCO
-		@tparam <configureOutPin> if true, then MCO-pin will be configured
-  */
-  template<clockSourceMCO src = clockSourceMCO::NO_CLOCK, bool configureOutPin = true>
-  __attribute__ ((always_inline)) inline
-  static void EnableMCO(){
-    RCC->CFGR = (RCC->CFGR & (~ RCC_CFGR_MCO)) | static_cast<uint32_t>(src);
-  }
-
-private:
-
-  /*!
-    @brief Returns value of AHB in Hz
-  */
-  __attribute__ ((always_inline)) inline
-  static uint32_t AHB(){return clockAHB;}
-
-  /*!
-    @brief Returns value of APB1 in Hz
-  */
-  __attribute__ ((always_inline)) inline
-  static uint32_t APB1(){return clockAPB1;}
-
-  /*!
-    @brief Returns value of APB2 in Hz
-  */
-  __attribute__ ((always_inline)) inline
-  static uint32_t APB2(){return clockAPB2;}
-
-  /*!
-    @brief Returns value of ADC in Hz
-  */
-  __attribute__ ((always_inline)) inline
-  static uint32_t ADC(){return clockADC;}
-
-  /*!
-    @brief Returns value of USB in Hz
-  */
-  __attribute__ ((always_inline)) inline
-  static uint32_t USB(){return clockUSB;}
-
-  /*!
-    @brief Returns value for APB1 Timers in Hz
-  */
-  __attribute__ ((always_inline)) inline
-  static uint32_t APB1TIM(){return clockAPB1TIM;}
-
-  /*!
-    @brief Returns value for APB2 Timers in Hz
-  */
-  __attribute__ ((always_inline)) inline
-  static uint32_t APB2TIM(){return clockAPB2TIM;}
-
-  /*!
-    @brief Returns value for APB2 Timers in Hz
-  */
-  __attribute__ ((always_inline)) inline
-  static void delay(size_t uS){
-    volatile size_t delay = uS * 66;
-    while (delay--);
-  }
-
-  Clock() = delete;
-
-  friend common::Clock<Clock>;
-  friend Power;
-  template<typename...>
-  friend class Pinlist;
-
-  static inline uint32_t clockSystem = 0;
-  static inline uint32_t clockAHB = 0;
-  static inline uint32_t clockAPB1 = 0;
-  static inline uint32_t clockAPB2 = 0;
-  static inline uint32_t clockUSB = 0;
-  static inline uint32_t clockADC = 0;
-  static inline uint32_t clockAPB1TIM = 0;
-  static inline uint32_t clockAPB2TIM = 0;
-
-  static const uint8_t PLLMULOFFSET = 2;
-  static const uint8_t PLLMULMAX = 16; /* Max multiplier of PLL*/
-  static const uint8_t PLLMULSTARTBIT = 18;
-  static const uint32_t MAXSYSVALUE = 72000000;
-
-  static const uint8_t AHBPRESCSTARTBIT = 4;
-  static const uint8_t AHBDIVIDEREN = 8;
-  static constexpr uint8_t AHBDIVIDER[] = {1,2,3,4,6,7,8,9}; /*left shifted*/
-
-  static const uint8_t APBDEVIDEREN = 4;
-  static const uint8_t APB1PRESCSTARTBIT = 8;
-  static const uint8_t APB2PRESCSTARTBIT = 11;
-
-  static constexpr uint8_t ADCDIVIDER[] = {2, 4, 6, 8}; 
-  static const uint8_t ADCPRESCSTARTBIT = 14;
-
-  static const uint32_t HSEONTIMEOUT = 500;
-
-  static const uint32_t RCCIRQFLAGSRESETVALUE = 0x009F1F9F;
-
-  template<uint32_t value>
-  static constexpr uint32_t flashLatency = value >= 48000000 ? FLASH_ACR_LATENCY_2 :
-                                           value >= 24000000 ? FLASH_ACR_LATENCY_1 :
-                                                               FLASH_ACR_LATENCY_0;
-
-  /*!
-    @brief Set controller clock.
+    @brief Set controller clock
     ADC-clock is set to value/2.
     USB-clock is set to 48MHz in case of value = 72MHz, otherwise to value.
     AHB-clock is set to value.
     APB1-clock is set to 36MHz in case of value\2 >= 36MHz, othervise to value.
     APB2-clock is set to value.
     @tparam <value> new value for system clock (in Hz)
-		@tparam <isExternalSrc> if true, then controller is driven by external source(HSE), otherwise - by internal(HSI). Default value is HSE
+    @tparam <source> if true, then controller is driven by external source(HSE), otherwise - by internal(HSI). Default value is HSE
     @tparam <sourceValue> HSE value (in Hz). Skip it in case of HSI
   */
-  template<uint32_t value = 72000000, bool isExternalSrc = true, uint32_t sourceValue = 8000000>
-  static bool _Set(){
-    uint32_t constexpr srcValue = !isExternalSrc ? 8000000 : sourceValue;
-    RCC->CR |= RCC_CR_HSION;
-    while (!(RCC->CR & RCC_CR_HSIRDY));
-
-    RCC->CFGR = 0;
+  template<uint32_t value = 72000000, 
+           configuration::clock::source source = configuration::clock::source::HSE, 
+           uint32_t sourceValue = 8000000>
+  static bool Set(){
     
-    if constexpr(isExternalSrc){
-      RCC->CR = RCC_CR_HSION | RCC_CR_HSEON | (RCC->CR & (RCC_CR_HSITRIM | RCC_CR_HSICAL));
-      uint32_t i = 0;
-      for (; !(RCC->CR & RCC_CR_HSERDY) && i < HSEONTIMEOUT ;i++);
-      if (i > HSEONTIMEOUT) return false;
-    } else RCC->CR = RCC_CR_HSION | (RCC->CR & (RCC_CR_HSITRIM | RCC_CR_HSICAL));
+    using namespace configuration::clock;
+    uint32_t constexpr valueSource = source == source::HSI ? 8000000 : sourceValue;
+    uint32_t constexpr valueCFGR = _GetValueCFGR<value, source, valueSource>();
+    uint32_t constexpr valueFlagSource = source == source::HSE ? valueOnHSE : valueOnHSI;
+    uint32_t constexpr valueFlagReady = source == source::HSE ? valueFlagReadyHSE : valueFlagReadyHSI;
+    uint32_t constexpr valueFlagClearSource = source == source::HSE ? valueOnHSI : valueOnHSE;
+
+    Registers::_Set<addressCR, valueFlagSource>();
+    if (!_IsValueSet<addressCR, valueFlagReady>()) return false;
+    Registers::_Set<addressCFGR, (uint32_t)source, valueSW_Mask>();
+    if (!_IsValueSet<addressCFGR, (uint32_t)source << 2, valueMaskSWS>()) return false;
+    Registers::_Clear<addressCR, valueOnPLL | valueFlagClearSource>();
     
-    FLASH->ACR = (FLASH->ACR &(~FLASH_ACR_LATENCY)) | FLASH_ACR_PRFTBE | flashLatency<value>;
-    if constexpr (value > srcValue){
-      RCC->CFGR = _cfgrValueConfigWithPLL<value, isExternalSrc, srcValue>();
-      RCC->CR |= RCC_CR_PLLON;
-      while (!(RCC->CR & RCC_CR_PLLRDY));
-      RCC->CFGR = _cfgrValueConfigWithPLL<value, isExternalSrc, srcValue>() | RCC_CFGR_SW_PLL;
-    } else RCC->CFGR = _cfgrValueConfig<value, isExternalSrc, srcValue>();
+    Registers::_Write<addressACR, valueOnPrefetchBuffer | valueLatency<value>>();
+    Registers::_Write<addressCFGR, valueCFGR>();
+    if constexpr (value > valueSource){
+      Registers::_Set<addressCR, valueOnPLL>();
+      if (!_IsValueSet<addressCR, valueFlagReadyPLL>()) return false;
+      Registers::_Write<addressCFGR, valueCFGR | valueSW_PLL>();
+      if (!_IsValueSet<addressCFGR, valueSWS_PLL, valueMaskSWS>()) return false;
+    }
 
-    if constexpr(srcToCheck<value, isExternalSrc, srcValue> == RCC_CFGR_SWS_PLL  ||
-                srcToCheck<value, isExternalSrc, srcValue> == RCC_CFGR_SWS_HSE)
-      while ((RCC->CFGR & RCC_CFGR_SWS )!= srcToCheck<value, isExternalSrc, srcValue>);
-    if constexpr (isExternalSrc) RCC->CR &=~ RCC_CR_HSION;
-
-    clockSystem = value;
-    clockAHB = clockSystem; // !This expression is correct, if RCC_CFGR_HPRE is set to default (SYSCLK not divided)
-    clockAPB1 = _CalcAPB<_cfgrValueConfig<value, isExternalSrc, srcValue>(), RCC_CFGR_PPRE1, APB1PRESCSTARTBIT, 1>();
-    clockAPB1TIM = _CalcAPB<_cfgrValueConfig<value, isExternalSrc, srcValue>(), RCC_CFGR_PPRE1, APB1PRESCSTARTBIT, 2>();
-    clockAPB2 = clockAHB;
-    clockAPB2TIM = clockAHB;
-    clockADC = clockAHB / ADCDIVIDER[0];
-    clockUSB = cfgrvValuePreUSB<value> ? clockAHB : (clockAHB * 2) / 3;
+    valueSystem = value;
+    valueAHB = valueSystem; // !This value is correct, if RCC_CFGR_HPRE is set to default (SYSCLK not divided)
+    valueAPB1 = _GetValueAPB<valueCFGR, valueMaskPrescalerAPB1, startBitAPB1, 1>();
+    valueAPB1TIM = _GetValueAPB<valueCFGR, valueMaskPrescalerAPB1, startBitAPB1, 2>();
+    valueAPB2 = valueAHB;
+    valueAPB2TIM = valueAHB;
+    valueADC = valueAHB / valuePrescalerADC;
+    valueUSB = valuePrescalerUSB<value> ? valueAHB : (valueAHB * 2) / 3;
+   
     return true;
   }
-  
+
   /*!
-    @brief Set controller clock.    \n 
-    ADC-clock is set to value/2.    \n
-    USB-clock is set to 48MHz in case of value = 72MHz, otherwise to value.    \n
-    AHB-clock is set to value.
-    APB1-clock is set to 36MHz in case of value\2 >= 36MHz, othervise to value    \n
-    APB2-clock is set to value.
-    @param [in] value new value for system clock (in Hz)
-		@param [in] isExternalSrc if true, then controller is driven by external source(HSE), otherwise - by internal(HSI). Default value is HSE
-    @param [in] srcValue HSE value (in Hz). Skip it in case of HSI
+    @brief Enable or disable MCO
+    @tparam <source> of MCO. Set to mco::NO_CLOCK to disable MCO
   */
-  static bool _Set(uint32_t value = 72000000, bool isExternalSrc = true, uint32_t srcValue = 8000000){
-    _SwitchToHSI();
-    if (isExternalSrc){
-      if(!_EnableHSE()) return false;
-    }
-
-    uint32_t flashLatency = FLASH_ACR_LATENCY_0;
-    if (value >= 48000000) flashLatency = FLASH_ACR_LATENCY_2;
-    else if (value >= 24000000) flashLatency = FLASH_ACR_LATENCY_1;
-    FLASH->ACR = (FLASH->ACR &(~FLASH_ACR_LATENCY)) | FLASH_ACR_PRFTBE | flashLatency;
-
-    uint32_t cfgrValue = value == 72000000 ? 0 : RCC_CFGR_USBPRE;
-    if (value >= (MAXSYSVALUE/2)) cfgrValue |= RCC_CFGR_PPRE1_DIV2;
-
-    uint32_t srcToCheck = static_cast<uint32_t>(isExternalSrc) << 2UL;
-    if (value > srcValue){
-      uint32_t mul = value / srcValue;
-      uint32_t div = value % srcValue;
-      if (!isExternalSrc || (isExternalSrc && div)){
-        mul*=2UL;
-        cfgrValue |= RCC_CFGR_PLLXTPRE_HSE_Div2;
-      }
-
-      if (div) mul++;
-
-      if (mul > PLLMULMAX || mul < 2) return false;
-
-      cfgrValue |= (mul-2) << PLLMULSTARTBIT;
-
-      if (isExternalSrc) cfgrValue |= RCC_CFGR_PLLSRC_HSE;
-
-      RCC->CFGR |= cfgrValue;
-      RCC->CR |= RCC_CR_PLLON;
-
-      while (!(RCC->CR & RCC_CR_PLLRDY));
-      cfgrValue |= RCC_CFGR_SW_PLL;
-      srcToCheck = RCC_CFGR_SWS_PLL;
-    } else cfgrValue |= static_cast<uint32_t>(isExternalSrc);
-
-    RCC->CFGR |= cfgrValue;
-
-    while ((RCC->CFGR & RCC_CFGR_SWS )!= srcToCheck);
-
-    if (isExternalSrc)RCC->CR &=~ RCC_CR_HSION;
-
-    clockSystem = value;
-    clockAHB = clockSystem; // !This expression is correct, if RCC_CFGR_HPRE is set to default (SYSCLK not divided)
-    clockAPB1 = _CalcAPB(cfgrValue, RCC_CFGR_PPRE1, APB1PRESCSTARTBIT, 1);
-    clockAPB1TIM = _CalcAPB(cfgrValue, RCC_CFGR_PPRE1, APB1PRESCSTARTBIT, 2);
-    clockAPB2 = clockAHB;
-    clockAPB2TIM = clockAHB;
-    clockADC = clockAHB / ADCDIVIDER[0];
-    clockUSB = cfgrValue & RCC_CFGR_USBPRE ? clockAHB : (clockAHB * 2) / 3;
-    return true;
-  }
-
-  template<uint32_t value, bool isExternalSrc, uint32_t srcValue>
-  __attribute__ ((always_inline)) inline
-  static constexpr uint32_t _mul(){
-    uint32_t mul = value / srcValue;
-    uint32_t div = value % srcValue;
-    if (!isExternalSrc || (isExternalSrc && div)) mul*=2UL;
-    if (div) mul++;
-    return mul;
-  }
-
-  template<uint32_t value, bool isExternalSrc, uint32_t srcValue>
-  __attribute__ ((always_inline)) inline
-  static constexpr uint32_t _cfgrValueConfigWithPLL(){
-    uint32_t cfgrValue = 0;
-    if (value >= (MAXSYSVALUE/2)) cfgrValue |= RCC_CFGR_PPRE1_DIV2;
-    if (value > srcValue){
-      if (!isExternalSrc || (isExternalSrc && (value % srcValue))) 
-        cfgrValue |= RCC_CFGR_PLLXTPRE_HSE_Div2;
-
-      cfgrValue |= (_mul<value, isExternalSrc, srcValue>()-2) << PLLMULSTARTBIT;
-
-      if (isExternalSrc) cfgrValue |= RCC_CFGR_PLLSRC_HSE;
-    }
-    return cfgrValue | cfgrvValuePreUSB<value>;
-  }
-
-  template<uint32_t value, bool isExternalSrc, uint32_t srcValue>
-  __attribute__ ((always_inline)) inline
-  static constexpr uint32_t _cfgrValueConfig(){
-    uint32_t cfgrValue = 0;
-    if (value >= (MAXSYSVALUE/2)) cfgrValue |= RCC_CFGR_PPRE1_DIV2;
-    if (value > srcValue) cfgrValue |= RCC_CFGR_SW_PLL;
-    else cfgrValue |= static_cast<uint32_t>(isExternalSrc);
-    return cfgrValue | cfgrvValuePreUSB<value>;
-  }
-
-  template<uint32_t value, bool isExternalSrc, uint32_t srcValue>
-  static constexpr uint32_t srcToCheck = value > srcValue ? RCC_CFGR_SWS_PLL : 
-                                         isExternalSrc    ? RCC_CFGR_SWS_HSE :
-                                                            RCC_CFGR_SWS_HSI;
-
-  template<uint32_t cfgrValue, uint32_t bitMask, uint32_t startBit, uint32_t mulTim>
-  __attribute__ ((always_inline)) inline
-  static constexpr uint32_t _CalcAPB(){
-    uint32_t prescallerAPB = (cfgrValue & bitMask) >> startBit;
-    if (prescallerAPB >= APBDEVIDEREN){
-      prescallerAPB &=~APBDEVIDEREN;
-      return (clockAHB >> (prescallerAPB + 1)) * mulTim;
-    } else{
-      return clockAHB;
-    }
-  }
-
-  static uint32_t _CalcAPB(uint32_t cfgrValue, uint32_t bitMask, uint32_t startBit, uint32_t mulTim){
-    uint32_t prescallerAPB = (cfgrValue & bitMask) >> startBit;
-    if (prescallerAPB >= APBDEVIDEREN){
-      prescallerAPB &=~APBDEVIDEREN;
-      return (clockAHB >> (prescallerAPB + 1)) * mulTim;
-    } else{
-      return clockAHB;
-    }
-  }
-
-  template<uint32_t value, uint32_t srcValue>
-  static constexpr uint32_t pllOnValueCR = value > srcValue ? RCC_CR_PLLON : 0U;
-
-  template<uint32_t value>
-  static constexpr uint32_t cfgrvValuePreUSB = value == 72000000 ? 0 : RCC_CFGR_USBPRE;
-
-  static void _SwitchToHSI(){
-    RCC->CR |= RCC_CR_HSION;
-    while (!(RCC->CR & RCC_CR_HSIRDY));
-
-    RCC->CFGR = 0;
-    RCC->CIR = RCCIRQFLAGSRESETVALUE;
-    RCC->CR = RCC_CR_HSION  | (RCC->CR & (RCC_CR_HSITRIM | RCC_CR_HSICAL));
-  }
-  
-  static bool _EnableHSE(){
-    RCC->CR |= RCC_CR_HSEON;
-    uint32_t i = 0;
-    for (; !(RCC->CR & RCC_CR_HSERDY) && i < HSEONTIMEOUT; ++i);
-    return (i <= HSEONTIMEOUT);
+  template<configuration::clock::mco source = configuration::clock::mco::NO_CLOCK>
+  __FORCE_INLINE static void MCO(){
+    Registers::_Set<addressCFGR, (uint32_t)source, valueMaskMCO>();
   }
 
   /*!
     @brief Returns value of System-clock(SYSCLCK) in Hz
   */
-  __attribute__ ((always_inline)) inline
-  static uint32_t _System(){return clockSystem;}
+  __FORCE_INLINE static uint32_t Get(){return valueSystem;}
 
-  using power = utils::Typelist<utils::ctv<GPIOA_BASE>, 
-                                utils::ctv<AFIO_BASE> 
-                              >;
+protected:
 
-  using pin = Pin<GPIOA_BASE, 8, pinConfiguration::Alternative_PushPull>;
+  /*!
+    @brief Returns value of AHB in Hz
+  */
+  __FORCE_INLINE static uint32_t AHB(){return valueAHB;}
+
+  /*!
+    @brief Returns value of APB1 in Hz
+  */
+  __FORCE_INLINE static uint32_t APB1(){return valueAPB1;}
+
+  /*!
+    @brief Returns value of APB2 in Hz
+  */
+  __FORCE_INLINE static uint32_t APB2(){return valueAPB2;}
+
+  /*!
+    @brief Returns value of ADC in Hz
+  */
+  __FORCE_INLINE static uint32_t ADC(){return valueADC;}
+
+  /*!
+    @brief Returns value of USB in Hz
+  */
+  __FORCE_INLINE static uint32_t USB(){return valueUSB;}
+
+  /*!
+    @brief Returns value for APB1 Timers in Hz
+  */
+  __FORCE_INLINE static uint32_t APB1TIM(){return valueAPB1TIM;}
+
+  /*!
+    @brief Returns value for APB2 Timers in Hz
+  */
+  __FORCE_INLINE static uint32_t APB2TIM(){return valueAPB2TIM;}
+
+private:
+
+  Clock() = delete;
+
+  template<typename>
+  friend class interfaces::IPower;
+  
+  template<typename...>
+  friend class helper::pinlist::Helper;
+
+  static constexpr uint32_t addressBase = 0x40021000;
+  static constexpr uint32_t addressCR = addressBase;
+  static constexpr uint32_t addressCFGR = addressBase + 4;
+  static constexpr uint32_t addressCIR = addressBase + 8;
+  static constexpr uint32_t addressFlashBase = 0x40022000;
+  static constexpr uint32_t addressACR = addressFlashBase;
+
+  static inline uint32_t valueSystem = 0;
+  static inline uint32_t valueAHB = 0;
+  static inline uint32_t valueAPB1 = 0;
+  static inline uint32_t valueAPB2 = 0;
+  static inline uint32_t valueUSB = 0;
+  static inline uint32_t valueADC = 0;
+  static inline uint32_t valueAPB1TIM = 0;
+  static inline uint32_t valueAPB2TIM = 0;
+
+  static constexpr uint32_t startBitPLLMUL = 18;
+  static constexpr uint32_t valueMax = 72000000;
+
+  static constexpr uint8_t valuePrescaler2APB = 4;
+  static constexpr uint8_t startBitAPB1 = 8;
+
+  static constexpr uint32_t valuePrescalerADC = 2;
+  static constexpr size_t valueTimeout = 500;
+
+  static constexpr uint32_t valueMaskMCO = 0xF000000;
+
+  static constexpr uint32_t valueLatency_0 = 0;
+  static constexpr uint32_t valueLatency_1 = 1;
+  static constexpr uint32_t valueLatency_2 = 2;
+
+  static constexpr uint32_t valuePrescalerHCKL_2 = 0x400;
+
+  static constexpr uint32_t valueOnHSI = 1;
+  static constexpr uint32_t valueOnHSE = 0x10000;
+  static constexpr uint32_t valueOnPLL = 0x1000000;
+
+  static constexpr uint32_t valuePrescalerPLLFromHSE_2 = 0x20000;
+
+  static constexpr uint32_t valueSourcePLLFromHSE = 0x10000;
+
+  static constexpr uint32_t valuePrescallerUSB = 0x400000;
+
+  static constexpr uint32_t valueSW_PLL = 2;
+  static constexpr uint32_t valueSW_Mask = 3;
+
+  static constexpr uint32_t valueFlagReadyHSI = 2;
+  static constexpr uint32_t valueFlagReadyHSE = 0x20000;
+  static constexpr uint32_t valueFlagReadyPLL = 0x2000000;
+
+  static constexpr uint32_t valueOnPrefetchBuffer = 0x2000000;
+
+  static constexpr uint32_t valueMaskHSITRIM = 0xF8;
+  static constexpr uint32_t valueMaskHSICAL = 0xFF00;
+
+    //(System Clock Switch Status)
+  static constexpr uint32_t valueSWS_HSI = 0;
+  static constexpr uint32_t valueSWS_HSE = 4;
+  static constexpr uint32_t valueSWS_PLL = 8;
+  static constexpr uint32_t valueMaskSWS = 12;
+
+  static constexpr uint32_t valueMaskPrescalerAPB1 = 0x700;
+
+  template<uint32_t value>
+  static constexpr uint32_t valueLatency = value >= 48000000 ? valueLatency_2 :
+                                           value >= 24000000 ? valueLatency_1 :
+                                                               valueLatency_0;
+
+  template<uint32_t value, configuration::clock::source source, uint32_t srcValue>
+  static constexpr uint32_t _GetMul(){
+    using namespace configuration::clock;
+    uint32_t mul = value / srcValue;
+    uint32_t div = value % srcValue;
+    if (source == source::HSI || (source == source::HSE && div)) mul*=2;
+    if (div) mul++;
+    return mul;
+  }
+
+  template<uint32_t value, configuration::clock::source source, uint32_t valueSource>
+  static constexpr uint32_t _GetValueCFGR(){
+    using namespace configuration::clock;
+    uint32_t valueCFGR = 0;
+    if (value >= (valueMax/2)) valueCFGR |= valuePrescalerHCKL_2;
+    if (value > valueSource){
+      if (source == source::HSI || (source == source::HSE && (value % valueSource))) 
+        valueCFGR |= valuePrescalerPLLFromHSE_2;
+
+      valueCFGR |= (_GetMul<value, source, valueSource>()-2) << startBitPLLMUL;
+
+      if (source == source::HSE) valueCFGR |= valueSourcePLLFromHSE;
+    } else valueCFGR |= (uint32_t)source;
+    return valueCFGR | valuePrescalerUSB<value>;
+  }
+
+  template<uint32_t valueCFGR, uint32_t bitMask, uint32_t startBit, uint32_t mulTim>
+  static constexpr uint32_t _GetValueAPB(){
+    uint32_t prescallerAPB = (valueCFGR & bitMask) >> startBit;
+    if (prescallerAPB >= valuePrescaler2APB){
+      prescallerAPB &=~ valuePrescaler2APB;
+      return (valueAHB >> (prescallerAPB + 1)) * mulTim;
+    } else{
+      return valueAHB;
+    }
+  }
+
+  template<uint32_t address, uint32_t value, uint32_t mask = value>
+  static bool _IsValueSet(){
+    for(size_t i = 0; i < valueTimeout; ++i){
+      if (Registers::_Read<address, mask>() == value)
+        return true;
+    }
+    return false;
+  }
+
+  template<uint32_t value>
+  static constexpr uint32_t valuePrescalerUSB =  value == 72000000 ? 0 : valuePrescallerUSB;
+
+  using pin = Pin::PA_8::mode::set<configuration::pin::Alternative_PushPull>;
+
+  struct initialization{
+    using power = typename controller::Power::fromPeripherals<pin>::power;
+    using pins = trait::Typelist<pin>;
+    using interrupts = trait::Valuelist<>;
+  };
 
 };
 

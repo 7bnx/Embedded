@@ -2,12 +2,12 @@
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
 //  github:       https://github.com/7bnx/Embedded
-//  Description:  Hardware-dependent driver for Power Enabling(Clock). STM32F1-series
+//  Description:  Hardware-dependent driver for Power Enabling(Clock). STM32F0-series
 //  TODO:
 //----------------------------------------------------------------------------------
 
-#ifndef _STM32F1_POWER_HPP
-#define _STM32F1_POWER_HPP
+#ifndef _STM32F0_POWER_HPP
+#define _STM32F0_POWER_HPP
 
 #include "../Common/Compiler/Compiler.h"
 #include "../Common/Core/Registers.hpp"
@@ -52,10 +52,31 @@ private:
       APB1ENR = 0x4002101C;
   };
   
+  struct mask{
+    struct AHBENR{
+      static constexpr uint32_t 
+        Enabled = 0x14U,
+        Disabled = 0x5E0041;
+    };
+    struct APB1ENR{
+      static constexpr uint32_t 
+        Enabled = 0,
+        Disabled = 0x10FE4932;
+    };
+    struct APB2ENR{
+      static constexpr uint32_t 
+        Enabled = 0,
+        Disabled = 0x475A21;
+    };
+  };
+
   using AddressesList = trait::Valuelist<address::AHBENR, address::APB1ENR, address::APB2ENR>;
 
-  using defaultEnable = fromValues<0x14U, 0U, 0U>::initialization::power;
-  using defaultDisable = fromValues<0x557, 0x3AFEC9FD, 0x38FFFD>::initialization::power;
+  using defaultEnable = fromValues<
+    mask::AHBENR::Enabled, mask::APB1ENR::Enabled, mask::APB2ENR::Enabled>::initialization::power;
+  
+  using defaultDisable = fromValues<
+    mask::AHBENR::Disabled, mask::APB1ENR::Disabled, mask::APB2ENR::Disabled>::initialization::power;
 
   template<typename EnableList, typename DisableList>
   __FORCE_INLINE static void _Set(){
@@ -73,4 +94,4 @@ private:
 
 } // !namespace controller
 
-#endif // !_STM32F1_POWER_HPP
+#endif // !_STM32F0_POWER_HPP

@@ -19,17 +19,20 @@ namespace controller{
 */
 enum class interface{
 
-  /*! @brief Pins or Pinlist*/ 
-  parallel,
+  /*! @brief Pin*/ 
+  SERIAL,
   
+  /*! @brief Pins or Pinlist*/ 
+  PARALLEL,
+
   /*! @brief UART or USART*/ 
-  uart,
+  UART,
   
   /*! @brief SPI*/ 
-  spi,
+  SPI,
   
   /*! @brief I2C*/ 
-  i2c
+  I2C
 };
 
 } // !namspace controller

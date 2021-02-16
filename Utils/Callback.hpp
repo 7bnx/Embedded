@@ -15,7 +15,7 @@
 */
 
 /*!
-  @brief Namespace for utils.
+  @brief Namespace for utils
 */
 namespace utils{
 
@@ -28,44 +28,44 @@ public:
   /*!
     @brief Constructor. Sets callback to epmty function.
   */
-	Callback() {function = [](void*) {};}
+  Callback() {function = [](void*) {};}
 
   /*!
     @brief Assign function to Callback
     @tparam <T> new function
   */
-	template<class T>
-	void operator=(T func) {
-		static_assert((sizeof(parameters) >= sizeof(T)),  
+  template<class T>
+  void operator=(T func) {
+    static_assert((sizeof(parameters) >= sizeof(T)),  
     "Too much variables in capture list");
     // Save the pointer to function, that call func
-		function = [](void* param) {
-			(*(T*)param)();
-		};
+    function = [](void* param) {
+      (*(T*)param)();
+    };
       // Copy func value to parameters
-			for (unsigned i = 0; i < sizeof(T); i++) {
-			  *(((char*)(parameters))+i) = *(((char*)(&func))+i);
-			}
-	}
+      for (unsigned i = 0; i < sizeof(T); i++) {
+        *(((char*)(parameters))+i) = *(((char*)(&func))+i);
+      }
+  }
 
   /*!
     @brief Call callback
   */
-	void operator()() {
-		// Call by function pointer with parameters
+  void operator()() {
+    // Call by function pointer with parameters
     if (function != nullptr)
-		  function(parameters);
-	}
+      function(parameters);
+  }
 
   /*!
     @brief Reset Callback
   */
   __attribute__ ((always_inline)) inline
-	void Reset() { function = [](void *){}; }
+  void Reset() { function = [](void *){}; }
 
 private:
-	void (*function)(void*);
-	void* parameters[1] { nullptr };
+  void (*function)(void*);
+  void* parameters[1] { nullptr };
 
 };
 

@@ -27,17 +27,22 @@ template<typename T, size_t size>
 | 3  | size_t Pop(T* destination, size_t length)         | Pop the number of elements to destination array           |
 | 4  | const T& Front()                                  | Read the head-element of buffer                           |
 | 5  | void Fill(const T& element)                       | Fill the whole buffer with element                        |
-| 6  | bool Push(const T &element)                       | Push element to buffer. Return false, if overflowed       |
-| 7  | bool Push(const T *const elements, size_t length) | Push array of elements. Return false, if overflowed       |
-| 8  | const T& operator[]                               | Read the element of buffer by index                       |
-| 9  | size_t GetSize()                                  | Get size of buffer                                        |
-| 10 | size_t GetCount()                                 | Get current number of elements in buffer                  |
-| 11 | void Clear()                                      | Clear the buffer (set head = tail = 0)                    |
-| 12 | size_t GetCountToBufferLastIndex()                | Get the number of elements till tail or end of the buffer |
-| 13 | size_t GetCountToOverflow()                       | Get the number of elements till buffer will be overflowed |
-| 14 | void SetHeadToLastIndex()                         | Set buffer's head to last index(tail or 0)                |
-| 15 | void AddToTail(size_t valueToAdd)                 | Add value to tail index)                                  |
-| 16 | const T* const GetHeadAddress()                   | Get address of buffer's head                              |
+| 6  | void Fill(const T& element, size_t number)        | Fill part of buffer with element                          |
+| 7  | bool Push(const T &element)                       | Push element to buffer. Return false, if overflowed       |
+| 8  | bool Push(const T *const elements, size_t length) | Push array of elements. Return false, if overflowed       |
+| 9  | const T& operator[]                               | Read the element of buffer by index                       |
+| 10  | size_t GetSize()                                 | Get size of buffer                                        |
+| 11 | size_t GetCount()                                 | Get current number of elements in buffer                  |
+| 12 | void Flush()                                      | Clear the buffer (set head = tail = 0)                    |
+| 13 | size_t GetCountToBufferLastIndex()                | Get the number of elements till tail or end of the buffer |
+| 14 | size_t GetCountToBuffersEnd()                     | Get the difference between size of buffer and tail index  |
+| 15 | size_t GetCountToOverflow()                       | Get the number of elements till buffer will be overflowed |
+| 16 | void SetHeadToLastIndex()                         | Set buffer's head to last index(tail or 0)                |
+| 17 | void SetHeadToTailIndex()                         | Set buffer's head to tail                                 |
+| 18 | void AddToTail(size_t valueToAdd)                 | Add value to tail index                                   |
+| 19 | void AddToHead(size_t valueToAdd)                 | Add value to head index                                   |
+| 20 | const T* const GetHeadAddress()                   | Get address of buffer's head                              |
+| 21 | const T* const GetTailAddress()                   | Get address of buffer's tail                              |
 
 ### Usage
 

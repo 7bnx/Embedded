@@ -3,86 +3,32 @@
 
 #include "HD44780.hpp"
 
-#define PARAMETERS uint8_t rowNumber, uint8_t columnNumber, typename interface
-#define CLASS HD44780<rowNumber, columnNumber, interface>
-
-const uint16_t delayStartUpInMS = 15; 
-
-const uint16_t delayPowerOnInUS[] = {5000, 160, 160}; 
-
-const uint16_t delayStrobeInNS = 450;
-
-const uint16_t delayInstructionInUS = 100;
-
-const uint16_t delayClearHomeInUS = 4100;
-
-const uint8_t rowBaseAddress[] = {0x00, 0x40, 0x14, 0x54};
-
-const uint16_t maskStrobePin = 0x100;
-const uint16_t maskDataPin = 0x200;
-
-const size_t commandsPowerOnNumber = 3;
-const size_t commandsInitInstructionNumber = 3;
-
-template<bool is8bitMode>
-const uint16_t commandPowerOn = 0x13 << (is8bitMode*4);
-const uint16_t commandEnable4BitMode = 0x12;
-const uint8_t commandClear = 0x01; // Clear displat and set cursor to Home
-const uint8_t commandCursorDirection = 0x06; // Increment cursor after write
-template<bool is8bitMode, uint8_t rowNumber> // Set 8 bit mode or 4 bit   // Set row number 
-const uint8_t commandInterfaceLength = (is8bitMode ? 0x30 : 0x20) | ((rowNumber + 1) << 3) & 8;
-const uint8_t commandSetPosition = 0x80;
-const uint8_t commandEnableDisplayCursor = 0x0C; // Turn display On
-const uint8_t commandCursorMask = 1;
-const uint8_t commandCursorBlinkMask = 0;
-template<bool is8bitMode, uint8_t rowNumber>
-const uint16_t commandsInit[commandsInitInstructionNumber] = {
-                                                    maskStrobePin | commandInterfaceLength<is8bitMode, rowNumber>,
-                                                    maskStrobePin | commandCursorDirection,
-                                                    maskStrobePin | commandEnableDisplayCursor
-                                                  };
-
+#define PARAMETERS size_t numberRow, size_t numberColumn, typename adapter, typename timer
+#define CLASS HD44780<numberRow, numberColumn, adapter, timer>
 
 namespace device{
 
 /*!
-  @brief Inizialization of HD44780
+  @brief Initialization of HD44780
 */ 
 template<PARAMETERS>
 void CLASS::Init(){
-  controller::Systick::Delay_ms(delayStartUpInMS);
+  timer::Delay_ms(delayStartUpInMS);
 
-  for(size_t i = 0; i < commandsPowerOnNumber; ++i){
-    WriteViaParallel(commandPowerOn<is8bitMode>);
-    controller::Systick::Delay_us(delayPowerOnInUS[i]);
+  for(auto delay : delayPowerOnUs){
+    _WriteViaParallel(commandPowerOn);
+    timer::Delay_us(delay);
   }
 
-  if constexpr(!is8bitMode){
-    WriteViaParallel(commandEnable4BitMode);
-    controller::Systick::Delay_us(delayInstructionInUS);
+  if constexpr(!_Is8BitMode()){
+    _WriteViaParallel(commandEnable4BitMode);
+    timer::Delay_us(delayCommandInUS);
   }
-
-  for(size_t i = 0; i < commandsInitInstructionNumber; ++i)
-    Write(commandsInit<is8bitMode, rowNumber>[i]);
+  
+  for(auto command : commandsInit)
+    _Write<true>(command);
 
   Clear();
-
-}
-
-/*!
-  @brief Clear LCD
-*/ 
-template<PARAMETERS>
-void CLASS::Clear(){
-  Fill(' ');
-}
-
-/*!
-  @brief Return cursor position to Home
-*/ 
-template<PARAMETERS>
-void CLASS::Home(){
-  SetPosition(0,0);
 }
 
 /*!
@@ -91,11 +37,12 @@ void CLASS::Home(){
   @param [in] row
 */
 template<PARAMETERS>
-bool CLASS::SetPosition(uint8_t x, uint8_t y){
-  if(y >= rowNumber || x >= columnNumber) return false;
-  uint16_t command = maskStrobePin | commandSetPosition | (x + rowBaseAddress[y]);
-  Write(command);
-  currentPosition.Set(x, y);
+bool CLASS::SetPosition(size_t column, size_t row){
+  if (row >= numberRow || column >= numberColumn) return false;
+  uint16_t command = maskCommandWrite | commandSetPosition | (column + addressRow[row]);
+  _Write<true>(command);
+  currentColumn = column;
+  currentRow = row;
   return true;
 }
 
@@ -106,11 +53,9 @@ bool CLASS::SetPosition(uint8_t x, uint8_t y){
 */ 
 template<PARAMETERS>
 void CLASS::EnableCursor(bool isOn, bool isBlink){
-  uint16_t command = maskStrobePin | 
-                      commandEnableDisplayCursor | 
-                      isOn << commandCursorMask | 
-                      isBlink <<commandCursorBlinkMask;
-  Write(command);
+  uint16_t command =  maskCommandWrite | commandEnableDisplayCursor | 
+                      (isOn ? commandCursorMask : 0) | (isBlink ?  commandCursorBlinkMask : 0);
+  _Write<true>(command);
 }
 
 /*!
@@ -119,16 +64,10 @@ void CLASS::EnableCursor(bool isOn, bool isBlink){
 */
 template<PARAMETERS>
 void CLASS::Fill(char symbol){
-  currentPosition.Reset();
+  currentColumn = currentRow = 0;
   SetPosition(0,0);
-  uint8_t y = 0;
-  for (int i = 0; i < columnNumber * rowNumber; ++i){
-    Write(maskDataPin | maskStrobePin | symbol);
-    if ((i + 1) % columnNumber == 0){
-      y = (y + 1) % rowNumber;
-      SetPosition(0, y);
-    }
-  }
+  for (size_t i = 0; i < valueMaxChars; ++i)
+    Print(maskDataWrite | symbol);
 }
 
 /*!
@@ -137,14 +76,12 @@ void CLASS::Fill(char symbol){
 */
 template<PARAMETERS>
 void CLASS::Print(char data){
-  Write(maskDataPin | maskStrobePin | data);
-  auto[x, y] = currentPosition;
-  x = (x + 1) % (columnNumber);
-  if (x == 0){
-    y = (y + 1) % rowNumber;
-    SetPosition(0, y);
+  _Write<false>(maskDataWrite | data);
+  currentColumn = (currentColumn + 1) % numberColumn;
+  if (currentColumn == 0){
+    currentRow = (currentRow + 1) % numberRow;
+    SetPosition(0, currentRow);
   }
-  currentPosition.Set(x, y);
 }
 
 /*!
@@ -154,19 +91,9 @@ void CLASS::Print(char data){
 */ 
 template<PARAMETERS>
 void CLASS::Print(const uint8_t* data, size_t length){
-  size_t startIndex = length > (columnNumber * rowNumber) ? length - columnNumber * rowNumber : 0U;
-  auto[x, y] = currentPosition;
-  size_t xValueToNextRow = columnNumber - x + startIndex;
-  for(size_t i = startIndex; i < length; ++i){
-    Write(maskDataPin | maskStrobePin | *(data + i));
-    if (i + 1 >= xValueToNextRow){
-      xValueToNextRow += columnNumber;
-      y = (y + 1) % (rowNumber);
-      SetPosition(0, y);
-    }
-  }
-  x = (x + (length - startIndex)) % (columnNumber);
-  currentPosition.Set(x, y);
+  length = (length > valueMaxChars) ? length - valueMaxChars : length;
+  for (size_t i = 0; i < length; ++i)
+    Print(maskDataWrite | *(data + i));
 }
 
 /*!
@@ -175,32 +102,60 @@ void CLASS::Print(const uint8_t* data, size_t length){
   @param [in] length to print
 */
 template<PARAMETERS>
+void CLASS::Print(const char* data){
+  while(*data != '\0')
+    Print(maskDataWrite | *(data++));
+}
+
+/*!
+  @brief Print array of char
+  @param [in] data to print
+  @param [in] length of chars
+*/
+template<PARAMETERS>
 void CLASS::Print(const char* data, size_t length){
-  Print(reinterpret_cast<const uint8_t*>(data), length);
+  Print(reinterpret_cast<const uint8_t *>(data), length);
 }
 
 template<PARAMETERS>
-template<typename _interface>
-void CLASS::WriteViaParallel(uint16_t data){
-  _interface::Write(data);
-  controller::Systick::Delay_ns(delayStrobeInNS);
-  interface::template Write<interface::size - 2>(false);
+template<typename adapter_>
+void CLASS::_WriteViaParallel(uint16_t data){
+  using pinStrobe = typename adapter_::template get_pin<adapter::size - 2>;
+  adapter_::template Write(data);
+  timer::Delay_ns(delayStrobeInNS);
+  pinStrobe::Low();
 }
 
 template<PARAMETERS>
-void CLASS::Write(uint16_t data){
-  if constexpr (connection == controller::interface::parallel){
-    uint16_t dataToWrite = is8bitMode ? data : data >> 4;
-    WriteViaParallel<interface>(dataToWrite);
-    if constexpr (!is8bitMode){
-      dataToWrite = 0x10 | data;
-      using dataPins = typename interface::template pop_front_pins_t<1>;
-      WriteViaParallel<dataPins>(dataToWrite);
+template<bool isCommand>
+void CLASS::_Write(uint16_t data){
+  if constexpr (interface == controller::interface::PARALLEL){
+    uint16_t dataToWrite = _Is8BitMode() ? data : data >> 4;
+    _WriteViaParallel(dataToWrite);
+    if constexpr (!_Is8BitMode()){
+      dataToWrite = maskStrobe4BitMode | data;
+      using pins4BitMode = typename adapter::template pop_front_pins<1>;
+      _WriteViaParallel<pins4BitMode>(dataToWrite);
     }
-    controller::Systick::Delay_us(delayInstructionInUS);
-  } else if constexpr (connection == controller::interface::i2c){
-
+  } else if constexpr (interface == controller::interface::I2C){
   }
+  timer::Delay_us(isCommand ? delayCommandInUS : delayDataInUS);
+}
+
+template<PARAMETERS>
+constexpr bool CLASS::_Is8BitMode(){
+  if constexpr (interface == controller::interface::PARALLEL)
+    if constexpr (adapter::size != 10) return false;
+  return true;
+}
+
+template<PARAMETERS>
+constexpr bool CLASS::_IsParallelValid(){
+  if constexpr (interface == controller::interface::PARALLEL){
+    if constexpr (adapter::size == 10 || adapter::size == 6) return true;
+    else return false;
+  }
+  return true;
 }
 
 } // !namespace device

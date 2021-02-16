@@ -2,12 +2,12 @@
 //  Author:       Semyon Ivanov
 //  e-mail:       agreement90@mail.ru
 //  github:       https://github.com/7bnx/Embedded
-//  Description:  Adapter for Pinlist. STM32F1-series
+//  Description:  Adapter for Pinlist. STM32F0-series
 //  TODO:          
 //----------------------------------------------------------------------------------
 
-#ifndef _STM32F1_PINLIST_HPP
-#define _STM32F1_PINLIST_HPP
+#ifndef _STM32F0_PINLIST_HPP
+#define _STM32F0_PINLIST_HPP
 
 #include "../Common/Compiler/Compiler.h"
 #include "../Common/Core/Registers.hpp"
@@ -66,4 +66,4 @@ class Pinlist: public interfaces::IPinlist<Pinlist<Pins...>, Pins...>, public ha
  
 }// !namespace controller
 
-#endif // !_STM32F1_PINLIST_HPP
+#endif // !_STM32F0_PINLIST_HPP
